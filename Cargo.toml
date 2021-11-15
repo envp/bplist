@@ -3,5 +3,5 @@ name = "plist"
 version = "0.1.0"
 edition = "2021"
 
-[depedencies]
-byteorder = "1"
+[dependencies]
+nom = "7"
