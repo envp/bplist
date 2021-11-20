@@ -14,7 +14,7 @@ mod bplist {
     #[derive(Debug)]
     pub enum Error {
         InvalidHeaderTag,
-        BadVersionBytes,
+        UnsupportedVersion,
         FileTooShort(usize),
     }
 
@@ -31,7 +31,10 @@ mod bplist {
     }
 
     #[derive(Debug)]
-    pub struct Trailer {
+    pub struct Metadata {
+        sort_version: u8,
+        offset_int_size: u8,
+        object_ref_size: u8,
         num_objects: usize,
         top_object: u64,
         offset_table_offset: usize,
@@ -64,23 +67,27 @@ mod bplist {
             b"00" => Ok(Version::V00),
             b"15" => Ok(Version::V15),
             b"16" => Ok(Version::V16),
-            _ => Err(Error::BadVersionBytes),
+            _ => Err(Error::UnsupportedVersion),
         }?;
 
         Ok((rest, Header { version }))
     }
 
-    fn parse_trailer(buffer: &[u8]) -> Result<(&'_ [u8], Trailer), Error> {
+    fn parse_metadata(buffer: &[u8]) -> Result<(&'_ [u8], Metadata), Error> {
         // The first 5 bytes are unused, and they are
         // followed by 3 single byte fields:
         // sort_version, offset_int_size, object_ref_size
-        let (rest, _) = take_n::<8>(buffer)?;
+        let (rest, _) = take_n::<5>(buffer)?;
+        let (rest, [sort_version, offset_int_size, object_ref_size]) = take_n::<3>(rest)?;
         let (rest, num_objects) = get_be_u64(rest).map(|(r, word)| (r, word as usize))?;
         let (rest, top_object) = get_be_u64(rest)?;
         let (rest, offset_table_offset) = get_be_u64(rest).map(|(r, word)| (r, word as usize))?;
         Ok((
             rest,
-            Trailer {
+            Metadata {
+                sort_version,
+                offset_int_size,
+                object_ref_size,
                 num_objects,
                 top_object,
                 offset_table_offset,
@@ -88,8 +95,7 @@ mod bplist {
         ))
     }
 
-    fn parse_body(trailer: Trailer, buffer: &[u8]) -> Result<(&'_ [u8], ()), Error> {
-        println!("{:02x?}", buffer.split_at(trailer.offset_table_offset));
+    fn parse_body(buffer: &[u8], trailer: Metadata) -> Result<(&'_ [u8], ()), Error> {
         Ok((buffer, ()))
     }
 
@@ -97,14 +103,23 @@ mod bplist {
         let (rest, head) = parse_header(buffer)?;
         println!("{:?}", head);
 
-        let (_, trailing) = rest.split_at(rest.len() - 32);
-        assert_eq!(trailing.len(), 32, "binary plist trailers MUST be 32 bytes long!");
+        let (body, trailing) = rest.split_at(rest.len() - 32);
+        debug_assert_eq!(
+            trailing.len(),
+            32,
+            "binary plist trailers MUST be 32 bytes long!"
+        );
 
-        let (rest, trailer) = parse_trailer(trailing)?;
-        assert!(rest.is_empty(), "");
-        println!("{:?}", trailer);
+        let (rest, metadata) = parse_metadata(trailing)?;
+        debug_assert!(
+            rest.is_empty(),
+            "Trailer should consume all the trailing bytes"
+        );
+        println!("{:02x?}", body);
 
-        let (rest, body) = parse_body(trailer, buffer)?;
+        println!("{:02x?}", buffer);
+
+        let (rest, body) = parse_body(rest, metadata)?;
         println!("{:?}", body);
 
         Ok(BPList {})
