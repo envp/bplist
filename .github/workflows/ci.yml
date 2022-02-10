@@ -20,10 +20,13 @@ jobs:
           rustup component add rustfmt clippy
           rustc --version
       - name: format
-        run: |
-          cargo fmt --all -- --check
+        uses: actions-rs/cargo@v1
+        with:
+          command: fmt
+          toolchain: nightly
+          args: --check
       - name: clippy
-        - uses: actions-rs/clippy-check@v1
+        uses: actions-rs/clippy-check@v1
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           args: --all-features
