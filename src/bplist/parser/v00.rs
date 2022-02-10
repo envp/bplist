@@ -68,9 +68,6 @@ impl<'a> UnresolvedObject<'a> {
     }
 }
 
-// FIXME:
-// Lotsa magic constants here, put them in a struct or merge into `TypeMarker`
-
 fn create_null_or_bool<'buffer>(byte: u8) -> Result<UnresolvedObject<'buffer>, ParseError> {
     match byte & 0x0f {
         Constants::BYTE_MARKER_NULL => Ok(UnresolvedObject::wrap(Object::Null)),
