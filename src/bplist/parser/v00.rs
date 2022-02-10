@@ -136,8 +136,11 @@ fn create_realnum<'buf>(width: u8, data: &'buf [u8]) -> Result<UnresolvedObject<
 ///
 /// [1]: https://developer.apple.com/documentation/corefoundation/cfabsolutetime
 fn create_date<'buf>(data: &'buf [u8]) -> Result<UnresolvedObject<'_>, ParseError> {
+    // NOTE: This name is bound to f64 so that the Error type of be_f64 can be
+    // inferred. Without this we end up with E0283
+    let read_f64: fn(&'buf [u8]) -> IResult<&'_ [u8], f64> = be_f64;
     let (_, cf_date) =
-        all_consuming(be_f64)(data).map_err(|_| ParseError::InvalidDate(data.to_owned()))?;
+        all_consuming(read_f64)(data).map_err(|_| ParseError::InvalidDate(data.to_owned()))?;
     const SECONDS_BETWEEN_CF_AND_UNIX_EPOCH: f64 = 978_307_200.0;
     let unix_date_offset: f64 = cf_date + SECONDS_BETWEEN_CF_AND_UNIX_EPOCH;
     Ok(UnresolvedObject::wrap(Object::DateTime(unix_date_offset)))
