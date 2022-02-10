@@ -146,6 +146,24 @@ fn create_date<'buf>(data: &'buf [u8]) -> Result<UnresolvedObject<'_>, ParseErro
     Ok(UnresolvedObject::wrap(Object::DateTime(unix_date_offset)))
 }
 
+/// Reads arbitrary binary data into a bytebuffer
+fn create_data_from_buffer<'buf>(
+    size_marker: u8,
+    data: &'buf [u8],
+) -> Result<UnresolvedObject<'_>, ParseError> {
+    match size_marker {
+        Constants::INTEGER_SIZE_FOLLOWS => todo!("Implement lookforward for length"),
+        num_bytes => {
+            debug_assert_eq!(
+                num_bytes as usize,
+                data.len(),
+                "Number of bytes in size doesn't match buffer size"
+            );
+            Ok(UnresolvedObject::wrap(Object::Blob(data.to_owned())))
+        }
+    }
+}
+
 /// Parse the buffer to create a partially initialized dictionary object.
 /// This does not recursively parse the child key-value pairs but will store
 /// offsets to them for resolution at a later time
@@ -192,7 +210,7 @@ fn create_object_from_buffer<'buffer>(
                 Constants::BYTE_MARKER_DATE => create_date(&buffer[1..]),
                 _ => Err(ParseError::InvalidContent(byte)),
             },
-            TypeMarker::Data => todo!(),
+            TypeMarker::Data => create_data_from_buffer(byte & 0x0f, buffer[1..]),
             TypeMarker::AsciiString => todo!(),
             TypeMarker::Unicode16String => todo!(),
             TypeMarker::Array => todo!(),

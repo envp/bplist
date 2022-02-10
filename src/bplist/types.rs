@@ -14,7 +14,7 @@ pub enum Object {
     SignedInteger(i128),
     Real(f64),
     DateTime(f64),
-    Data(Box<[u8]>),
+    Blob(Vec<u8>),
     String(String),
     Array(Vec<Object>),
     Dictionary(HashMap<String, Object>),
