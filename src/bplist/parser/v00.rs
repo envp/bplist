@@ -207,7 +207,7 @@ fn create_object_from_buffer<'buffer>(
                 Constants::BYTE_MARKER_DATE => create_date(&buffer[1..]),
                 _ => Err(ParseError::InvalidContent(byte)),
             },
-            TypeMarker::Data => create_data_from_buffer(byte & 0x0f, buffer[1..]),
+            TypeMarker::Data => create_data_from_buffer(byte & 0x0f, &buffer[1..]),
             TypeMarker::AsciiString => todo!(),
             TypeMarker::Unicode16String => todo!(),
             TypeMarker::Array => todo!(),
