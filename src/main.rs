@@ -1,8 +1,6 @@
-mod bplist;
-
-use crate::bplist::parser::parse;
+use bplist::parser::parse;
 
 fn main() {
-    let data = include_bytes!("../empty.plist");
+    let data = include_bytes!("../examples/example.plist");
     let _ = parse(data);
 }
