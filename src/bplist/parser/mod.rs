@@ -103,7 +103,7 @@ pub fn parse(buffer: &[u8]) -> Result<BPList, ParseError> {
             "Trailer must start immediately after offset table"
         );
 
-        let (_, preferences) = match header.version {
+        let (_, _preferences) = match header.version {
             Version::V00 => v00::parse_body(&trailer, body_offset as _, body),
             Version::V15 => todo!("bplist v1.5 body parsing not implemented!"),
             Version::V16 => todo!("bplist v1.6 body parsing not implemented!"),

@@ -300,7 +300,7 @@ impl<'a> Body<'a> {
     fn new(buffer: &'a [u8], trailer: &Trailer, body_offset: usize) -> Self {
         // The +1 is to encode the minimum of 1 object (0x00) that can be in a valid plist
         debug_assert!(
-            trailer.offset_table_offset >= body_offset + 1,
+            trailer.offset_table_offset > body_offset,
             "Offset table starts before end of body! Offset table: {}, body: {}",
             trailer.offset_table_offset,
             body_offset
