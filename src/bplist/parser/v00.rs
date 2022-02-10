@@ -161,6 +161,28 @@ fn create_data_from_buffer<'buf>(
     }
 }
 
+/// Parse the buffer to create a partially initialized array object.
+/// This does not recursively parse the child elements but will store
+/// offsets to them for resolution at a later time
+fn create_array<'buf>(
+    marker: u8,
+    buffer: &'buf [u8],
+) -> Result<UnresolvedObject<'buf>, ParseError> {
+    let (child_offsets, num_elems) = match marker & 0x0f {
+        Constants::INTEGER_SIZE_FOLLOWS => todo!("Implement lookforward for length"),
+        num_elems => (buffer, num_elems as usize),
+    };
+    debug_assert_eq!(
+        num_elems,
+        buffer.len(),
+        "Buffer has incorrect number of array elements"
+    );
+    Ok(UnresolvedObject {
+        shell: Object::Array(Vec::with_capacity(num_elems)),
+        children: Some(child_offsets),
+    })
+}
+
 /// Parse the buffer to create a partially initialized dictionary object.
 /// This does not recursively parse the child key-value pairs but will store
 /// offsets to them for resolution at a later time
@@ -210,7 +232,7 @@ fn create_object_from_buffer<'buffer>(
             TypeMarker::Data => create_data_from_buffer(byte & 0x0f, &buffer[1..]),
             TypeMarker::AsciiString => todo!(),
             TypeMarker::Unicode16String => todo!(),
-            TypeMarker::Array => todo!(),
+            TypeMarker::Array => create_array(byte, &buffer[1..]),
             TypeMarker::Dictionary => create_dictionary(byte, &buffer[1..]),
         },
         None => Err(ParseError::InvalidDataOffset(1)),
