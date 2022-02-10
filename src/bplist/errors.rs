@@ -10,6 +10,7 @@ pub enum ParseError {
     InvalidIntegerWidth(u8),
     InvalidFloatWidth(u8),
     InvalidInteger(Vec<u8>),
+    InvalidDate(Vec<u8>),
     InvalidFloat(Vec<u8>),
     // FIXME: Rework error reporting for more detailed error markers
     NomError,

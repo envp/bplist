@@ -1,21 +1,57 @@
+//! Implements the body parser for binary plist format `00`
 use std::collections::HashMap;
 
 use nom::{
     branch::alt,
     combinator::{all_consuming, map},
-    number::complete::{be_f32, be_f64, be_i128, be_i64, be_u16, be_u32, be_u64, be_u8},
+    number::complete::{be_f32, be_f64, be_i128, be_i64, be_u16, be_u32, be_u8},
     IResult,
 };
 
-use crate::{
-    bplist::{
-        errors::{file_too_short, ParseError},
-        parser::Object,
-        types::ParseResult,
-        Trailer,
-    },
-    parser::TypeMarker,
-};
+use crate::bplist::{errors::ParseError, parser::Object, types::ParseResult, Trailer};
+
+#[derive(Debug, PartialEq)]
+enum TypeMarker {
+    NullOrBool = 0x00,
+    Integer = 0x10,
+    Real = 0x20,
+    Date = 0x30,
+    Data = 0x40,
+    AsciiString = 0x50,
+    Unicode16String = 0x60,
+    Array = 0xA0,
+    Dictionary = 0xD0,
+}
+
+impl TryFrom<u8> for TypeMarker {
+    type Error = ParseError;
+    fn try_from(value: u8) -> Result<Self, Self::Error> {
+        match value {
+            0x00 => Ok(Self::NullOrBool),
+            0x10 => Ok(Self::Integer),
+            0x20 => Ok(Self::Real),
+            0x30 => Ok(Self::Date),
+            0x40 => Ok(Self::Data),
+            0x50 => Ok(Self::AsciiString),
+            0x60 => Ok(Self::Unicode16String),
+            0xA0 => Ok(Self::Array),
+            0xD0 => Ok(Self::Dictionary),
+            byte => Err(ParseError::InvalidContent(byte)),
+        }
+    }
+}
+
+struct Constants;
+
+impl Constants {
+    const BYTE_MARKER_NULL: u8 = 0x00;
+    const BYTE_MARKER_FALSE: u8 = 0x08;
+    const BYTE_MARKER_TRUE: u8 = 0x09;
+    const BYTE_MARKER_DATE: u8 = 0x33;
+    /// 0x0f is a special size flag which indicates that the next two bytes
+    /// will be an int type marker, and then the size it encodes
+    const INTEGER_SIZE_FOLLOWS: u8 = 0x0f;
+}
 
 #[derive(Debug)]
 struct UnresolvedObject<'a> {
@@ -32,11 +68,14 @@ impl<'a> UnresolvedObject<'a> {
     }
 }
 
+// FIXME:
+// Lotsa magic constants here, put them in a struct or merge into `TypeMarker`
+
 fn create_null_or_bool<'buffer>(byte: u8) -> Result<UnresolvedObject<'buffer>, ParseError> {
     match byte & 0x0f {
-        0x00 => Ok(UnresolvedObject::wrap(Object::Null)),
-        0x08 => Ok(UnresolvedObject::wrap(Object::Boolean(false))),
-        0x09 => Ok(UnresolvedObject::wrap(Object::Boolean(false))),
+        Constants::BYTE_MARKER_NULL => Ok(UnresolvedObject::wrap(Object::Null)),
+        Constants::BYTE_MARKER_TRUE => Ok(UnresolvedObject::wrap(Object::Boolean(false))),
+        Constants::BYTE_MARKER_FALSE => Ok(UnresolvedObject::wrap(Object::Boolean(false))),
         _ => Err(ParseError::InvalidContent(byte)),
     }
 }
@@ -54,7 +93,9 @@ fn parse_at_most_f64<'buffer>(data: &'buffer [u8]) -> IResult<&'buffer [u8], f64
 }
 
 /// Parse an integer that is represented in a type that is at least `width`
-/// bytes wide.
+/// bytes wide. This parser will check if all of the buffer is consumed in the
+/// process of creating the integer.
+///
 /// The plutil tool:
 /// 1. Interprets 1, 2, 4 byte integers as unsigned
 /// 2. Interprets 8, 16 byte integers are interpreted as signed
@@ -77,6 +118,9 @@ fn create_integer<'buf>(width: u8, data: &'buf [u8]) -> Result<UnresolvedObject<
     }
 }
 
+/// Parse a floating point number that is represented in a type that is at
+/// least `width` bytes wide. This parser will check if all of the buffer is
+/// consumed in the process of creating a float.
 fn create_realnum<'buf>(width: u8, data: &'buf [u8]) -> Result<UnresolvedObject<'_>, ParseError> {
     match width {
         4 | 8 => {
@@ -88,13 +132,30 @@ fn create_realnum<'buf>(width: u8, data: &'buf [u8]) -> Result<UnresolvedObject<
     }
 }
 
+/// Parse a date encoded as a Core Foundation date.
+/// Core Foundation dates are stored as 64 bit floating point offsets 31 years
+/// after unix epoch (Jan 1, 2001 00:00:00 GMT ). Apple calls timestamps
+/// relative to this epoch [`CFAbsoluteTime`][1].
+///
+/// [1]: https://developer.apple.com/documentation/corefoundation/cfabsolutetime
+fn create_date<'buf>(data: &'buf [u8]) -> Result<UnresolvedObject<'_>, ParseError> {
+    let (_, cf_date) =
+        all_consuming(be_f64)(data).map_err(|_| ParseError::InvalidDate(data.to_owned()))?;
+    const SECONDS_BETWEEN_CF_AND_UNIX_EPOCH: f64 = 978_307_200.0;
+    let unix_date_offset: f64 = cf_date + SECONDS_BETWEEN_CF_AND_UNIX_EPOCH;
+    Ok(UnresolvedObject::wrap(Object::DateTime(unix_date_offset)))
+}
+
+/// Parse the buffer to create a partially initialized dictionary object.
+/// This does not recursively parse the child key-value pairs but will store
+/// offsets to them for resolution at a later time
 fn create_dictionary<'buf>(
     marker: u8,
     buffer: &'buf [u8],
 ) -> Result<UnresolvedObject<'buf>, ParseError> {
     // Doesn't handle the case of 0xDF
     let (child_offsets, num_pairs) = match marker & 0x0f {
-        0x0f => todo!("Implement lookforward for length"),
+        Constants::INTEGER_SIZE_FOLLOWS => todo!("Implement lookforward for length"),
         num_pairs => (buffer, num_pairs as usize),
     };
     debug_assert_eq!(
@@ -108,6 +169,10 @@ fn create_dictionary<'buf>(
     })
 }
 
+/// Parse the buffer create a partially initialized object. Self referential
+/// structures such as Arrays / Dictionaries are partially initialized with
+/// the required space to store child objects, but will not attempt to parse
+/// the children, since those will be resolved later.
 fn create_object_from_buffer<'buffer>(
     buffer: &'buffer [u8],
 ) -> Result<UnresolvedObject<'buffer>, ParseError> {
@@ -123,7 +188,10 @@ fn create_object_from_buffer<'buffer>(
                 let width = 1 << (byte & 0x0f);
                 create_realnum(width, &buffer[1..])
             }
-            TypeMarker::Date => todo!(),
+            TypeMarker::Date => match byte {
+                Constants::BYTE_MARKER_DATE => create_date(&buffer[1..]),
+                _ => Err(ParseError::InvalidContent(byte)),
+            },
             TypeMarker::Data => todo!(),
             TypeMarker::AsciiString => todo!(),
             TypeMarker::Unicode16String => todo!(),

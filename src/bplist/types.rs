@@ -13,6 +13,7 @@ pub enum Object {
     UnsignedInteger(u32),
     SignedInteger(i128),
     Real(f64),
+    DateTime(f64),
     Data(Box<[u8]>),
     String(String),
     Array(Vec<Object>),
