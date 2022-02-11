@@ -15,7 +15,7 @@ pub enum Object {
     Real(f64),
     DateTime(f64),
     Blob(Vec<u8>),
-    String(String),
+    AsciiString(String),
     Array(Vec<Object>),
     Dictionary(HashMap<String, Object>),
 }
