@@ -7,11 +7,11 @@ pub enum ParseError {
     FileTooShort(usize),
     InvalidContent(u8),
     InvalidDataOffset(usize),
-    InvalidIntegerWidth(u8),
-    InvalidFloatWidth(u8),
-    InvalidInteger(Vec<u8>),
+    InvalidInteger(u8, Vec<u8>),
+    InvalidFloat(u8, Vec<u8>),
     InvalidDate(Vec<u8>),
-    InvalidFloat(Vec<u8>),
+    InvalidAsciiString(Vec<u8>),
+    InvalidUtf16String(Vec<u8>),
     // FIXME: Rework error reporting for more detailed error markers
     NomError,
 }

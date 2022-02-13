@@ -3,12 +3,31 @@ use std::collections::HashMap;
 
 use nom::{
     branch::alt,
-    combinator::{all_consuming, map},
+    combinator::{all_consuming, fail, map},
+    multi::many0,
     number::complete::{be_f32, be_f64, be_i128, be_i64, be_u16, be_u32, be_u8},
     IResult,
 };
 
 use crate::bplist::{errors::ParseError, parser::Object, types::ParseResult, Trailer};
+
+trait Ascii {
+    fn from_ascii(_: &[u8]) -> Result<String, FromAsciiError>;
+}
+
+struct FromAsciiError;
+
+impl Ascii for String {
+    fn from_ascii(elems: &[u8]) -> Result<String, FromAsciiError> {
+        if elems.is_ascii() {
+            let mut s = String::with_capacity(elems.len());
+            s.extend(elems.iter().map(|&r| r as char));
+            Ok(s)
+        } else {
+            Err(FromAsciiError {})
+        }
+    }
+}
 
 #[derive(Debug, PartialEq)]
 enum TypeMarker {
@@ -100,33 +119,31 @@ fn parse_at_most_f64<'buffer>(data: &'buffer [u8]) -> IResult<&'buffer [u8], f64
 fn create_integer<'buf>(width: u8, data: &'buf [u8]) -> Result<UnresolvedObject<'_>, ParseError> {
     // This is likely better than an `if` because we expect the `width` to be
     // an integer power of 2
-    match width {
-        1 | 2 | 4 => {
-            let (_, number) = all_consuming(parse_at_most_u32)(data)
-                .map_err(|_| ParseError::InvalidInteger(data.to_owned()))?;
-            Ok(UnresolvedObject::wrap(Object::UnsignedInteger(number)))
-        }
-        8 | 16 => {
-            let (_, number) = all_consuming(parse_i64_or_i128)(data)
-                .map_err(|_| ParseError::InvalidInteger(data.to_owned()))?;
-            Ok(UnresolvedObject::wrap(Object::SignedInteger(number)))
-        }
-        _ => Err(ParseError::InvalidIntegerWidth(width)),
-    }
+    let parser: Box<dyn FnMut(&'buf [u8]) -> IResult<&'_ [u8], Object>> = match width {
+        1 => Box::new(map(be_u8, |r| Object::UnsignedInteger(r.into()))),
+        2 => Box::new(map(be_u16, |r| Object::UnsignedInteger(r.into()))),
+        4 => Box::new(map(be_u32, |r| Object::UnsignedInteger(r.into()))),
+        8 => Box::new(map(be_i64, |r| Object::SignedInteger(r.into()))),
+        16 => Box::new(map(be_i128, |r| Object::SignedInteger(r.into()))),
+        _ => Box::new(fail),
+    };
+    let (_, obj) = all_consuming(parser)(data)
+        .map_err(|_| ParseError::InvalidInteger(width, data.to_vec()))?;
+    Ok(UnresolvedObject::wrap(obj))
 }
 
 /// Parse a floating point number that is represented in a type that is at
 /// least `width` bytes wide. This parser will check if all of the buffer is
 /// consumed in the process of creating a float.
 fn create_realnum<'buf>(width: u8, data: &'buf [u8]) -> Result<UnresolvedObject<'_>, ParseError> {
-    match width {
-        4 | 8 => {
-            let (_, number) = all_consuming(parse_at_most_f64)(data)
-                .map_err(|_| ParseError::InvalidFloat(data.to_owned()))?;
-            Ok(UnresolvedObject::wrap(Object::Real(number)))
-        }
-        _ => Err(ParseError::InvalidFloatWidth(width)),
-    }
+    let parser: Box<dyn FnMut(&'buf [u8]) -> IResult<&'_ [u8], Object>> = match width {
+        4 => Box::new(map(be_f32, |r| Object::Real(r.into()))),
+        8 => Box::new(map(be_f64, |r| Object::Real(r.into()))),
+        _ => Box::new(fail),
+    };
+    let (_, obj) =
+        all_consuming(parser)(data).map_err(|_| ParseError::InvalidFloat(width, data.to_vec()))?;
+    Ok(UnresolvedObject::wrap(obj))
 }
 
 /// Parse a date encoded as a Core Foundation date.
@@ -153,6 +170,85 @@ fn create_data_from_buffer<'buf>(
 ) -> Result<UnresolvedObject<'_>, ParseError> {
     match size_marker {
         Constants::INTEGER_SIZE_FOLLOWS => todo!("Implement lookforward for length"),
+        num_bytes => {
+            debug_assert_eq!(
+                num_bytes as usize,
+                data.len(),
+                "Number of bytes in size doesn't match buffer size"
+            );
+            Ok(UnresolvedObject::wrap(Object::Blob(data.to_owned())))
+        }
+    }
+}
+
+/// Reads size of a structure encoded in the structures body bytes
+fn read_size<'buf>(data: &'buf [u8]) -> ParseResult<&'_ [u8], u32> {
+    let width = 1 << (data[0] & 0x0f);
+    let content = &data[1..];
+    let result: IResult<&'buf [u8], u32> = match width {
+        1 => map(be_u8, |r| r.into())(content),
+        2 => map(be_u16, |r| r.into())(content),
+        4 => map(be_u32, |r| r)(content),
+        _ => fail(content),
+    };
+
+    result.map_err(|_| ParseError::InvalidInteger(width, content[..width.into()].to_vec()))
+}
+
+/// Parses the input buffer into an ASCII string. Checks and produces an error
+/// if an ASCII string could not be created.
+fn create_ascii_string<'buf>(
+    size_marker: u8,
+    data: &'buf [u8],
+) -> Result<UnresolvedObject<'_>, ParseError> {
+    match size_marker {
+        Constants::INTEGER_SIZE_FOLLOWS => {
+            let (rest, num_bytes) = read_size(data)?;
+            debug_assert_eq!(
+                num_bytes as usize,
+                rest.len(),
+                "Parsed length must be same as length of string being parsed"
+            );
+            let string =
+                String::from_ascii(rest).map_err(|_| ParseError::InvalidAsciiString(rest.to_vec()))?;
+            Ok(UnresolvedObject::wrap(Object::AsciiString(string)))
+        }
+        num_bytes => {
+            debug_assert_eq!(
+                num_bytes as usize,
+                data.len(),
+                "Number of bytes in size doesn't match buffer size"
+            );
+            Ok(UnresolvedObject::wrap(Object::Blob(data.to_owned())))
+        }
+    }
+}
+
+/// Parses the input buffer into a UTF-16 encoded string.
+/// Checks and produces an error if a UTF-16 BE string could not be created.
+fn create_utf16_string<'buf>(
+    size_marker: u8,
+    data: &'buf [u8],
+) -> Result<UnresolvedObject<'_>, ParseError> {
+    match size_marker {
+        Constants::INTEGER_SIZE_FOLLOWS => {
+            let (rest, num_chars) = read_size(data)?;
+            // Since each char is a `u16`, the number of bytes (`u8`)
+            // in the string should be twice the number of chars expected
+            debug_assert_eq!(
+                2 * num_chars as usize,
+                rest.len(),
+                "Parsed length must be same as length of string being parsed"
+            );
+            // FIXME: Replace with `slice::array_chunks()` once it is stablized
+            let chars = rest
+                .chunks(2)
+                .map(|w| u16::from_be_bytes([w[0], w[1]]))
+                .collect::<Vec<_>>();
+            let string =
+                String::from_utf16(&chars).map_err(|_| ParseError::InvalidUtf16String(rest.to_vec()))?;
+            Ok(UnresolvedObject::wrap(Object::AsciiString(string)))
+        }
         num_bytes => {
             debug_assert_eq!(
                 num_bytes as usize,
@@ -233,7 +329,7 @@ fn create_object_from_buffer<'buffer>(
                 _ => Err(ParseError::InvalidContent(byte)),
             },
             TypeMarker::Data => create_data_from_buffer(byte & 0x0f, &buffer[1..]),
-            TypeMarker::AsciiString => todo!(),
+            TypeMarker::AsciiString => create_ascii_string(byte & 0x0f, &buffer[1..]),
             TypeMarker::Unicode16String => todo!(),
             TypeMarker::Array => create_array(byte, &buffer[1..]),
             TypeMarker::Dictionary => create_dictionary(byte, &buffer[1..]),
