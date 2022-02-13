@@ -4,7 +4,6 @@ use std::collections::HashMap;
 use nom::{
     branch::alt,
     combinator::{all_consuming, fail, map},
-    multi::many0,
     number::complete::{be_f32, be_f64, be_i128, be_i64, be_u16, be_u32, be_u8},
     IResult,
 };
@@ -209,8 +208,8 @@ fn create_ascii_string<'buf>(
                 rest.len(),
                 "Parsed length must be same as length of string being parsed"
             );
-            let string =
-                String::from_ascii(rest).map_err(|_| ParseError::InvalidAsciiString(rest.to_vec()))?;
+            let string = String::from_ascii(rest)
+                .map_err(|_| ParseError::InvalidAsciiString(rest.to_vec()))?;
             Ok(UnresolvedObject::wrap(Object::AsciiString(string)))
         }
         num_bytes => {
@@ -245,8 +244,8 @@ fn create_utf16_string<'buf>(
                 .chunks(2)
                 .map(|w| u16::from_be_bytes([w[0], w[1]]))
                 .collect::<Vec<_>>();
-            let string =
-                String::from_utf16(&chars).map_err(|_| ParseError::InvalidUtf16String(rest.to_vec()))?;
+            let string = String::from_utf16(&chars)
+                .map_err(|_| ParseError::InvalidUtf16String(rest.to_vec()))?;
             Ok(UnresolvedObject::wrap(Object::AsciiString(string)))
         }
         num_bytes => {
