@@ -1,8 +1,7 @@
-//! Implements the body parser for binary plist format `00`
+//! Implements the body parser for binary plist format (magic bytes `bplist00`)
 use std::collections::HashMap;
 
 use nom::{
-    branch::alt,
     combinator::{all_consuming, fail, map},
     number::complete::{be_f32, be_f64, be_i128, be_i64, be_u16, be_u32, be_u8},
     IResult,
