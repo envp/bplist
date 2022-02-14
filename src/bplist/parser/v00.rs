@@ -89,22 +89,10 @@ impl<'a> UnresolvedObject<'a> {
 fn create_null_or_bool<'buffer>(byte: u8) -> Result<UnresolvedObject<'buffer>, ParseError> {
     match byte & 0x0f {
         Constants::BYTE_MARKER_NULL => Ok(UnresolvedObject::wrap(Object::Null)),
-        Constants::BYTE_MARKER_TRUE => Ok(UnresolvedObject::wrap(Object::Boolean(false))),
+        Constants::BYTE_MARKER_TRUE => Ok(UnresolvedObject::wrap(Object::Boolean(true))),
         Constants::BYTE_MARKER_FALSE => Ok(UnresolvedObject::wrap(Object::Boolean(false))),
         _ => Err(ParseError::InvalidContent(byte)),
     }
-}
-
-fn parse_at_most_u32<'buffer>(data: &'buffer [u8]) -> IResult<&'buffer [u8], u32> {
-    alt((be_u32, map(be_u16, |r| r.into()), map(be_u8, |r| r.into())))(data)
-}
-
-fn parse_i64_or_i128<'buffer>(data: &'buffer [u8]) -> IResult<&'buffer [u8], i128> {
-    alt((be_i128, map(be_i64, |r| r as i128)))(data)
-}
-
-fn parse_at_most_f64<'buffer>(data: &'buffer [u8]) -> IResult<&'buffer [u8], f64> {
-    alt((be_f64, map(be_f32, |r| r as f64)))(data)
 }
 
 /// Parse an integer that is represented in a type that is at least `width`
@@ -119,7 +107,7 @@ fn create_integer<'buf>(width: u8, data: &'buf [u8]) -> Result<UnresolvedObject<
     // This is likely better than an `if` because we expect the `width` to be
     // an integer power of 2
     let parser: Box<dyn FnMut(&'buf [u8]) -> IResult<&'_ [u8], Object>> = match width {
-        1 => Box::new(map(be_u8, |r| Object::UnsignedInteger(r.into()))),
+        // 1 => Box::new(map(be_u8, |r| Object::UnsignedInteger(r.into()))),
         2 => Box::new(map(be_u16, |r| Object::UnsignedInteger(r.into()))),
         4 => Box::new(map(be_u32, |r| Object::UnsignedInteger(r.into()))),
         8 => Box::new(map(be_i64, |r| Object::SignedInteger(r.into()))),
@@ -329,7 +317,7 @@ fn create_object_from_buffer<'buffer>(
             },
             TypeMarker::Data => create_data_from_buffer(byte & 0x0f, &buffer[1..]),
             TypeMarker::AsciiString => create_ascii_string(byte & 0x0f, &buffer[1..]),
-            TypeMarker::Unicode16String => todo!(),
+            TypeMarker::Unicode16String => create_utf16_string(byte & 0x0f, &buffer[1..]),
             TypeMarker::Array => create_array(byte, &buffer[1..]),
             TypeMarker::Dictionary => create_dictionary(byte, &buffer[1..]),
         },
@@ -433,7 +421,7 @@ pub fn parse_body<'a>(
     buffer: &'a [u8],
 ) -> ParseResult<&'a [u8], ()> {
     let body = Body::new(buffer, trailer, body_offset as usize);
-    let mut object_table: HashMap<_, _> = HashMap::with_capacity(trailer.num_objects);
+    let mut object_table: Vec<_> = Vec::with_capacity(trailer.num_objects);
 
     for (offset, chunk) in &body {
         // Translate the offsets of errors relative to the start of the file
@@ -444,8 +432,10 @@ pub fn parse_body<'a>(
             }
             _ => err,
         })?;
-        object_table.insert(offset, partial_obj);
+        object_table.push(partial_obj);
     }
 
-    Ok((buffer, ()))
+    todo!("Resolve objects here");
+
+    unreachable!("Each plist MUST have a root object. How did you get here?");
 }
