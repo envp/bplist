@@ -78,11 +78,22 @@ struct UnresolvedObject<'a> {
 }
 
 impl<'a> UnresolvedObject<'a> {
+    /// Wrap an object that cannot have children into this `UnresolvedObject`.
+    /// This exists for making creating objects without children more
+    /// convenient.
     fn wrap(item: Object) -> Self {
         Self {
             shell: item,
             children: None,
         }
+    }
+
+    /// Check if the current object needs to be resolved any further.
+    ///
+    /// This will only return true if an object has a non-empty collection of
+    /// children
+    fn needs_resolution(&self) -> bool {
+        self.children.map_or(false, |offsets| !offsets.is_empty())
     }
 }
 
@@ -265,7 +276,11 @@ fn create_array<'buf>(
     );
     Ok(UnresolvedObject {
         shell: Object::Array(Vec::with_capacity(num_elems)),
-        children: Some(child_offsets),
+        children: if !child_offsets.is_empty() {
+            Some(child_offsets)
+        } else {
+            None
+        },
     })
 }
 
@@ -288,7 +303,11 @@ fn create_dictionary<'buf>(
     );
     Ok(UnresolvedObject {
         shell: Object::Dictionary(HashMap::with_capacity(num_pairs)),
-        children: Some(child_offsets),
+        children: if !child_offsets.is_empty() {
+            Some(child_offsets)
+        } else {
+            None
+        },
     })
 }
 
