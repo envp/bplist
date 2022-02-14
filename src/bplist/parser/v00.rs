@@ -59,17 +59,17 @@ impl TryFrom<u8> for TypeMarker {
     }
 }
 
-struct Constants;
-
-impl Constants {
-    const BYTE_MARKER_NULL: u8 = 0x00;
-    const BYTE_MARKER_FALSE: u8 = 0x08;
-    const BYTE_MARKER_TRUE: u8 = 0x09;
-    const BYTE_MARKER_DATE: u8 = 0x33;
+mod constants {
+    pub const BYTE_MARKER_NULL: u8 = 0x00;
+    pub const BYTE_MARKER_FALSE: u8 = 0x08;
+    pub const BYTE_MARKER_TRUE: u8 = 0x09;
+    pub const BYTE_MARKER_DATE: u8 = 0x33;
     /// 0x0f is a special size flag which indicates that the next two bytes
     /// will be an int type marker, and then the size it encodes
-    const INTEGER_SIZE_FOLLOWS: u8 = 0x0f;
+    pub const INTEGER_SIZE_FOLLOWS: u8 = 0x0f;
 }
+
+use constants::*;
 
 #[derive(Debug)]
 struct UnresolvedObject<'a> {
@@ -99,9 +99,9 @@ impl<'a> UnresolvedObject<'a> {
 
 fn create_null_or_bool<'buffer>(byte: u8) -> Result<UnresolvedObject<'buffer>, ParseError> {
     match byte & 0x0f {
-        Constants::BYTE_MARKER_NULL => Ok(UnresolvedObject::wrap(Object::Null)),
-        Constants::BYTE_MARKER_TRUE => Ok(UnresolvedObject::wrap(Object::Boolean(true))),
-        Constants::BYTE_MARKER_FALSE => Ok(UnresolvedObject::wrap(Object::Boolean(false))),
+        BYTE_MARKER_NULL => Ok(UnresolvedObject::wrap(Object::Null)),
+        BYTE_MARKER_TRUE => Ok(UnresolvedObject::wrap(Object::Boolean(true))),
+        BYTE_MARKER_FALSE => Ok(UnresolvedObject::wrap(Object::Boolean(false))),
         _ => Err(ParseError::InvalidContent(byte)),
     }
 }
@@ -167,7 +167,7 @@ fn create_data_from_buffer<'buf>(
     data: &'buf [u8],
 ) -> Result<UnresolvedObject<'_>, ParseError> {
     match size_marker {
-        Constants::INTEGER_SIZE_FOLLOWS => todo!("Implement lookforward for length"),
+        INTEGER_SIZE_FOLLOWS => todo!("Implement lookforward for length"),
         num_bytes => {
             debug_assert_eq!(
                 num_bytes as usize,
@@ -200,7 +200,7 @@ fn create_ascii_string<'buf>(
     data: &'buf [u8],
 ) -> Result<UnresolvedObject<'_>, ParseError> {
     match size_marker {
-        Constants::INTEGER_SIZE_FOLLOWS => {
+        INTEGER_SIZE_FOLLOWS => {
             let (rest, num_bytes) = read_size(data)?;
             debug_assert_eq!(
                 num_bytes as usize,
@@ -229,7 +229,7 @@ fn create_utf16_string<'buf>(
     data: &'buf [u8],
 ) -> Result<UnresolvedObject<'_>, ParseError> {
     match size_marker {
-        Constants::INTEGER_SIZE_FOLLOWS => {
+        INTEGER_SIZE_FOLLOWS => {
             let (rest, num_chars) = read_size(data)?;
             // Since each char is a `u16`, the number of bytes (`u8`)
             // in the string should be twice the number of chars expected
@@ -266,7 +266,7 @@ fn create_array<'buf>(
     buffer: &'buf [u8],
 ) -> Result<UnresolvedObject<'buf>, ParseError> {
     let (child_offsets, num_elems) = match marker & 0x0f {
-        Constants::INTEGER_SIZE_FOLLOWS => todo!("Implement lookforward for length"),
+        INTEGER_SIZE_FOLLOWS => todo!("Implement lookforward for length"),
         num_elems => (buffer, num_elems as usize),
     };
     debug_assert_eq!(
@@ -293,7 +293,7 @@ fn create_dictionary<'buf>(
 ) -> Result<UnresolvedObject<'buf>, ParseError> {
     // Doesn't handle the case of 0xDF
     let (child_offsets, num_pairs) = match marker & 0x0f {
-        Constants::INTEGER_SIZE_FOLLOWS => todo!("Implement lookforward for length"),
+        INTEGER_SIZE_FOLLOWS => todo!("Implement lookforward for length"),
         num_pairs => (buffer, num_pairs as usize),
     };
     debug_assert_eq!(
@@ -331,7 +331,7 @@ fn create_object_from_buffer<'buffer>(
                 create_realnum(width, &buffer[1..])
             }
             TypeMarker::Date => match byte {
-                Constants::BYTE_MARKER_DATE => create_date(&buffer[1..]),
+                BYTE_MARKER_DATE => create_date(&buffer[1..]),
                 _ => Err(ParseError::InvalidContent(byte)),
             },
             TypeMarker::Data => create_data_from_buffer(byte & 0x0f, &buffer[1..]),
