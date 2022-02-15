@@ -9,13 +9,13 @@ use nom::{
 
 use crate::bplist::{errors::ParseError, parser::Object, types::ParseResult, Trailer};
 
-trait Ascii {
+trait FromAscii {
     fn from_ascii(_: &[u8]) -> Result<String, FromAsciiError>;
 }
 
 struct FromAsciiError;
 
-impl Ascii for String {
+impl FromAscii for String {
     fn from_ascii(elems: &[u8]) -> Result<String, FromAsciiError> {
         if elems.is_ascii() {
             let mut s = String::with_capacity(elems.len());
@@ -179,17 +179,24 @@ fn create_data_from_buffer<'buf>(
 }
 
 /// Reads size of a structure encoded in the structures body bytes
-fn read_size<'buf>(data: &'buf [u8]) -> ParseResult<&'_ [u8], u32> {
+fn read_size<'buf>(data: &'buf [u8]) -> ParseResult<&'_ [u8], usize> {
     let width = 1 << (data[0] & 0x0f);
     let content = &data[1..];
-    let result: IResult<&'buf [u8], u32> = match width {
-        1 => map(be_u8, |r| r.into())(content),
-        2 => map(be_u16, |r| r.into())(content),
-        4 => map(be_u32, |r| r)(content),
+    let result: IResult<&'buf [u8], usize> = match width {
+        1 => map(be_u8, |r| r as usize)(content),
+        2 => map(be_u16, |r| r as usize)(content),
+        4 => map(be_u32, |r| r as usize)(content),
         _ => fail(content),
     };
 
     result.map_err(|_| ParseError::InvalidInteger(width, content[..width.into()].to_vec()))
+}
+
+fn parse_size_marker<'buf>(size_marker: u8, data: &'buf [u8]) -> ParseResult<&'_ [u8], usize> {
+    match size_marker {
+        INTEGER_SIZE_FOLLOWS => read_size(data),
+        size => Ok((data, size as usize)),
+    }
 }
 
 /// Parses the input buffer into an ASCII string. Checks and produces an error
@@ -198,27 +205,15 @@ fn create_ascii_string<'buf>(
     size_marker: u8,
     data: &'buf [u8],
 ) -> Result<UnresolvedObject<'_>, ParseError> {
-    match size_marker {
-        INTEGER_SIZE_FOLLOWS => {
-            let (rest, num_bytes) = read_size(data)?;
-            debug_assert_eq!(
-                num_bytes as usize,
-                rest.len(),
-                "Parsed length must be same as length of string being parsed"
-            );
-            let string = String::from_ascii(rest)
-                .map_err(|_| ParseError::InvalidAsciiString(rest.to_vec()))?;
-            Ok(UnresolvedObject::wrap(Object::AsciiString(string)))
-        }
-        num_bytes => {
-            debug_assert_eq!(
-                num_bytes as usize,
-                data.len(),
-                "Number of bytes in size doesn't match buffer size"
-            );
-            Ok(UnresolvedObject::wrap(Object::Blob(data.to_owned())))
-        }
-    }
+    let (buffer, num_chars) = parse_size_marker(size_marker, data)?;
+    debug_assert_eq!(
+        num_chars,
+        buffer.len(),
+        "Parsed length must be same as length of string being parsed"
+    );
+    let string =
+        String::from_ascii(buffer).map_err(|_| ParseError::InvalidAsciiString(buffer.to_vec()))?;
+    Ok(UnresolvedObject::wrap(Object::AsciiString(string)))
 }
 
 /// Parses the input buffer into a UTF-16 encoded string.
@@ -227,34 +222,25 @@ fn create_utf16_string<'buf>(
     size_marker: u8,
     data: &'buf [u8],
 ) -> Result<UnresolvedObject<'_>, ParseError> {
-    match size_marker {
-        INTEGER_SIZE_FOLLOWS => {
-            let (rest, num_chars) = read_size(data)?;
-            // Since each char is a `u16`, the number of bytes (`u8`)
-            // in the string should be twice the number of chars expected
-            debug_assert_eq!(
-                2 * num_chars as usize,
-                rest.len(),
-                "Parsed length must be same as length of string being parsed"
-            );
-            // FIXME: Replace with `slice::array_chunks()` once it is stablized
-            let chars = rest
-                .chunks(2)
-                .map(|w| u16::from_be_bytes([w[0], w[1]]))
-                .collect::<Vec<_>>();
-            let string = String::from_utf16(&chars)
-                .map_err(|_| ParseError::InvalidUtf16String(rest.to_vec()))?;
-            Ok(UnresolvedObject::wrap(Object::AsciiString(string)))
-        }
-        num_bytes => {
-            debug_assert_eq!(
-                num_bytes as usize,
-                data.len(),
-                "Number of bytes in size doesn't match buffer size"
-            );
-            Ok(UnresolvedObject::wrap(Object::Blob(data.to_owned())))
-        }
-    }
+    let (buffer, num_chars) = parse_size_marker(size_marker, data)?;
+    // Since each char is a `u16`, the number of bytes (`u8`)
+    // in the string should be twice the number of chars expected
+    debug_assert_eq!(
+        2 * num_chars as usize,
+        buffer.len(),
+        "Parsed length must be same as length of string being parsed"
+    );
+    // FIXME: Replace with `slice::array_chunks()` once it is stablized
+    let chars = buffer
+        .chunks(2)
+        .map(|w| {
+            let bytes: [u8; 2] = w[..3].try_into().expect("Unable to convert slice to array");
+            u16::from_be_bytes(bytes)
+        })
+        .collect::<Vec<_>>();
+    let string =
+        String::from_utf16(&chars).map_err(|_| ParseError::InvalidUtf16String(buffer.to_vec()))?;
+    Ok(UnresolvedObject::wrap(Object::AsciiString(string)))
 }
 
 /// Parse the buffer to create a partially initialized array object.
