@@ -117,7 +117,7 @@ fn create_integer<'buf>(width: u8, data: &'buf [u8]) -> Result<UnresolvedObject<
     // This is likely better than an `if` because we expect the `width` to be
     // an integer power of 2
     let parser: Box<dyn FnMut(&'buf [u8]) -> IResult<&'_ [u8], Object>> = match width {
-        // 1 => Box::new(map(be_u8, |r| Object::UnsignedInteger(r.into()))),
+        1 => Box::new(map(be_u8, |r| Object::UnsignedInteger(r.into()))),
         2 => Box::new(map(be_u16, |r| Object::UnsignedInteger(r.into()))),
         4 => Box::new(map(be_u32, Object::UnsignedInteger)),
         8 => Box::new(map(be_i64, |r| Object::SignedInteger(r.into()))),
