@@ -96,7 +96,7 @@ impl<'a> UnresolvedObject<'a> {
     }
 }
 
-fn create_null_or_bool<'buffer>(byte: u8) -> Result<UnresolvedObject<'buffer>, ParseError> {
+fn create_null_or_bool<'buf>(byte: u8) -> Result<UnresolvedObject<'buf>, ParseError> {
     match byte & 0x0f {
         BYTE_MARKER_NULL => Ok(UnresolvedObject::wrap(Object::Null)),
         BYTE_MARKER_TRUE => Ok(UnresolvedObject::wrap(Object::Boolean(true))),
@@ -300,13 +300,13 @@ fn create_dictionary<'buf>(
 /// structures such as Arrays / Dictionaries are partially initialized with
 /// the required space to store child objects, but will not attempt to parse
 /// the children, since those will be resolved later.
-fn create_object_from_buffer<'buffer>(
-    buffer: &'buffer [u8],
-) -> Result<UnresolvedObject<'buffer>, ParseError> {
+fn create_object_from_buffer<'buf>(
+    buffer: &'buf [u8],
+) -> Result<UnresolvedObject<'buf>, ParseError> {
     println!("parse ({:02} bytes): {:02x?}", buffer.len(), buffer);
     match buffer.first() {
         Some(&byte) => match (byte & 0xf0).try_into()? {
-            TypeMarker::NullOrBool => create_null_or_bool::<'buffer>(byte),
+            TypeMarker::NullOrBool => create_null_or_bool::<'buf>(byte),
             TypeMarker::Integer => {
                 let width = 1 << (byte & 0x0f);
                 create_integer(width, &buffer[1..])
@@ -330,16 +330,16 @@ fn create_object_from_buffer<'buffer>(
 }
 
 #[derive(Debug)]
-struct Body<'buffer> {
-    contents: &'buffer [u8],
-    offset_table: &'buffer [u8],
+struct Body<'buf> {
+    contents: &'buf [u8],
+    offset_table: &'buf [u8],
     body_offset: usize,
     offset_size: usize,
 }
 
-impl<'a, 'buffer> IntoIterator for &'a Body<'buffer> {
-    type Item = (usize, &'buffer [u8]);
-    type IntoIter = BodyIntoIterator<'a, 'buffer>;
+impl<'a, 'buf> IntoIterator for &'a Body<'buf> {
+    type Item = (usize, &'buf [u8]);
+    type IntoIter = BodyIntoIterator<'a, 'buf>;
 
     fn into_iter(self) -> Self::IntoIter {
         BodyIntoIterator {
@@ -350,13 +350,13 @@ impl<'a, 'buffer> IntoIterator for &'a Body<'buffer> {
 }
 
 #[derive(Debug)]
-struct BodyIntoIterator<'a, 'buffer: 'a> {
-    body: &'a Body<'buffer>,
+struct BodyIntoIterator<'a, 'buf: 'a> {
+    body: &'a Body<'buf>,
     index: usize,
 }
 
-impl<'a, 'buffer> Iterator for BodyIntoIterator<'a, 'buffer> {
-    type Item = (usize, &'buffer [u8]);
+impl<'a, 'buf> Iterator for BodyIntoIterator<'a, 'buf> {
+    type Item = (usize, &'buf [u8]);
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.index < self.body.offset_table.len() {
