@@ -165,17 +165,16 @@ fn create_data_from_buffer<'buf>(
     size_marker: u8,
     data: &'buf [u8],
 ) -> Result<UnresolvedObject<'_>, ParseError> {
-    match size_marker {
-        INTEGER_SIZE_FOLLOWS => todo!("Implement lookforward for length"),
-        num_bytes => {
-            debug_assert_eq!(
-                num_bytes as usize,
-                data.len(),
-                "Number of bytes in size doesn't match buffer size"
-            );
-            Ok(UnresolvedObject::wrap(Object::Blob(data.to_owned())))
-        }
-    }
+    let (buffer, num_bytes) = match size_marker {
+        INTEGER_SIZE_FOLLOWS => parse_size_marker(size_marker, data),
+        num_bytes => Ok((data, num_bytes as usize)),
+    }?;
+    debug_assert_eq!(
+        num_bytes as usize,
+        buffer.len(),
+        "Number of bytes in size doesn't match buffer size"
+    );
+    Ok(UnresolvedObject::wrap(Object::Blob(buffer.to_owned())))
 }
 
 /// Reads size of a structure encoded in the structures body bytes
@@ -247,13 +246,13 @@ fn create_utf16_string<'buf>(
 /// This does not recursively parse the child elements but will store
 /// offsets to them for resolution at a later time
 fn create_array<'buf>(
-    marker: u8,
+    size_marker: u8,
     buffer: &'buf [u8],
 ) -> Result<UnresolvedObject<'buf>, ParseError> {
-    let (child_offsets, num_elems) = match marker & 0x0f {
-        INTEGER_SIZE_FOLLOWS => todo!("Implement lookforward for length"),
-        num_elems => (buffer, num_elems as usize),
-    };
+    let (child_offsets, num_elems) = match size_marker {
+        INTEGER_SIZE_FOLLOWS => parse_size_marker(size_marker, buffer),
+        num_elems => Ok((buffer, num_elems as usize)),
+    }?;
     debug_assert_eq!(
         num_elems,
         buffer.len(),
@@ -273,14 +272,14 @@ fn create_array<'buf>(
 /// This does not recursively parse the child key-value pairs but will store
 /// offsets to them for resolution at a later time
 fn create_dictionary<'buf>(
-    marker: u8,
+    size_marker: u8,
     buffer: &'buf [u8],
 ) -> Result<UnresolvedObject<'buf>, ParseError> {
     // Doesn't handle the case of 0xDF
-    let (child_offsets, num_pairs) = match marker & 0x0f {
-        INTEGER_SIZE_FOLLOWS => todo!("Implement lookforward for length"),
-        num_pairs => (buffer, num_pairs as usize),
-    };
+    let (child_offsets, num_pairs) = match size_marker {
+        INTEGER_SIZE_FOLLOWS => parse_size_marker(size_marker, buffer),
+        num_pairs => Ok((buffer, num_pairs as usize)),
+    }?;
     debug_assert_eq!(
         2 * num_pairs,
         child_offsets.len(),
@@ -322,8 +321,8 @@ fn create_object_from_buffer<'buf>(
             TypeMarker::Data => create_data_from_buffer(byte & 0x0f, &buffer[1..]),
             TypeMarker::AsciiString => create_ascii_string(byte & 0x0f, &buffer[1..]),
             TypeMarker::Unicode16String => create_utf16_string(byte & 0x0f, &buffer[1..]),
-            TypeMarker::Array => create_array(byte, &buffer[1..]),
-            TypeMarker::Dictionary => create_dictionary(byte, &buffer[1..]),
+            TypeMarker::Array => create_array(byte & 0x0f, &buffer[1..]),
+            TypeMarker::Dictionary => create_dictionary(byte & 0x0f, &buffer[1..]),
         },
         None => Err(ParseError::InvalidDataOffset(1)),
     }
