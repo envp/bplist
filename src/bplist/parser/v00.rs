@@ -119,9 +119,9 @@ fn create_integer<'buf>(width: u8, data: &'buf [u8]) -> Result<UnresolvedObject<
     let parser: Box<dyn FnMut(&'buf [u8]) -> IResult<&'_ [u8], Object>> = match width {
         // 1 => Box::new(map(be_u8, |r| Object::UnsignedInteger(r.into()))),
         2 => Box::new(map(be_u16, |r| Object::UnsignedInteger(r.into()))),
-        4 => Box::new(map(be_u32, |r| Object::UnsignedInteger(r.into()))),
+        4 => Box::new(map(be_u32, Object::UnsignedInteger)),
         8 => Box::new(map(be_i64, |r| Object::SignedInteger(r.into()))),
-        16 => Box::new(map(be_i128, |r| Object::SignedInteger(r.into()))),
+        16 => Box::new(map(be_i128, Object::SignedInteger)),
         _ => Box::new(fail),
     };
     let (_, obj) = all_consuming(parser)(data)
@@ -135,7 +135,7 @@ fn create_integer<'buf>(width: u8, data: &'buf [u8]) -> Result<UnresolvedObject<
 fn create_realnum<'buf>(width: u8, data: &'buf [u8]) -> Result<UnresolvedObject<'_>, ParseError> {
     let parser: Box<dyn FnMut(&'buf [u8]) -> IResult<&'_ [u8], Object>> = match width {
         4 => Box::new(map(be_f32, |r| Object::Real(r.into()))),
-        8 => Box::new(map(be_f64, |r| Object::Real(r.into()))),
+        8 => Box::new(map(be_f64, Object::Real)),
         _ => Box::new(fail),
     };
     let (_, obj) =
