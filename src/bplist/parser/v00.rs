@@ -13,14 +13,11 @@ trait FromAscii {
     fn from_ascii(_: &[u8]) -> Result<String, FromAsciiError>;
 }
 
-
 /// Returned when non-ASCII byte sequence was used to create an ASCII string
 struct FromAsciiError;
 
-
 /// Provides a constructor from an ASCII byte sequence to a `String`
 impl FromAscii for String {
-
     /// Creates a `String` from the slice, if all the bytes in the given slice
     /// are representable as ASCII.
     ///
@@ -308,7 +305,7 @@ fn create_dictionary<'buf>(
 ///
 /// Self referential structures such as Arrays / Dictionaries are partially
 /// initialized with the required space allocated to store child objects.
-/// 
+///
 /// This does not attempt to resolve the children referred to, opting to leave
 /// that to a later phase
 ///
@@ -460,6 +457,4 @@ pub fn parse_body<'a>(
 }
 
 #[cfg(test)]
-mod tests {
-
-}
+mod tests {}
