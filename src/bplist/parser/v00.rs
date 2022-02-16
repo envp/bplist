@@ -13,9 +13,20 @@ trait FromAscii {
     fn from_ascii(_: &[u8]) -> Result<String, FromAsciiError>;
 }
 
+
+/// Returned when non-ASCII byte sequence was used to create an ASCII string
 struct FromAsciiError;
 
+
+/// Provides a constructor from an ASCII byte sequence to a `String`
 impl FromAscii for String {
+
+    /// Creates a `String` from the slice, if all the bytes in the given slice
+    /// are representable as ASCII.
+    ///
+    /// # Arguments
+    ///
+    /// `elems`: The byte slice to try converting to a `String`
     fn from_ascii(elems: &[u8]) -> Result<String, FromAsciiError> {
         if elems.is_ascii() {
             let mut s = String::with_capacity(elems.len());
@@ -106,10 +117,8 @@ fn create_null_or_bool<'buf>(byte: u8) -> Result<UnresolvedObject<'buf>, ParseEr
 }
 
 /// Parse an integer that is represented in a type that is at least `width`
-/// bytes wide. This parser will check if all of the buffer is consumed in the
-/// process of creating the integer.
+/// bytes wide. Ensures all input is consumed upon successful parse.
 ///
-/// The plutil tool:
 /// 1. Interprets 1, 2, 4 byte integers as unsigned
 /// 2. Interprets 8, 16 byte integers are interpreted as signed
 /// 3. Fail if numbers wider than 16 bytes are provided
@@ -295,10 +304,17 @@ fn create_dictionary<'buf>(
     })
 }
 
-/// Parse the buffer create a partially initialized object. Self referential
-/// structures such as Arrays / Dictionaries are partially initialized with
-/// the required space to store child objects, but will not attempt to parse
-/// the children, since those will be resolved later.
+/// Parse the buffer to create a partially initialized object.
+///
+/// Self referential structures such as Arrays / Dictionaries are partially
+/// initialized with the required space allocated to store child objects.
+/// 
+/// This does not attempt to resolve the children referred to, opting to leave
+/// that to a later phase
+///
+/// # Arguments
+///
+/// `buffer` - The byte buffer containing exactly one serialized object.
 fn create_object_from_buffer<'buf>(
     buffer: &'buf [u8],
 ) -> Result<UnresolvedObject<'buf>, ParseError> {
@@ -441,4 +457,9 @@ pub fn parse_body<'a>(
     todo!("Resolve objects here");
 
     unreachable!("Each plist MUST have a root object. How did you get here?");
+}
+
+#[cfg(test)]
+mod tests {
+
 }
