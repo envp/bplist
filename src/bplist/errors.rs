@@ -6,6 +6,7 @@ pub enum ParseError {
     UnsupportedVersion,
     FileTooShort(usize),
     InvalidContent(u8),
+    InvalidPrefix(u8),
     InvalidDataOffset(usize),
     InvalidInteger(u8, Vec<u8>),
     InvalidFloat(u8, Vec<u8>),
