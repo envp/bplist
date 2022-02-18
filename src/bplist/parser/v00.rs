@@ -61,7 +61,7 @@ impl TryFrom<u8> for TypeMarker {
             0x60 => Ok(Self::Unicode16String),
             0xA0 => Ok(Self::Array),
             0xD0 => Ok(Self::Dictionary),
-            byte => Err(ParseError::InvalidContent(byte)),
+            byte => Err(ParseError::InvalidPrefix(byte)),
         }
     }
 }
@@ -78,7 +78,7 @@ mod constants {
 
 use constants::*;
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 struct UnresolvedObject<'a> {
     shell: Object,
     children: Option<&'a [u8]>,
@@ -457,4 +457,95 @@ pub fn parse_body<'a>(
 }
 
 #[cfg(test)]
-mod tests {}
+mod tests {
+    use super::*;
+
+    macro_rules! create_multibyte_object_decode_test {
+        ($test_case_name: ident, $byte_sequence: expr, $leaf_object: expr) => {
+            #[test]
+            fn $test_case_name() {
+                let buffer = Vec::from($byte_sequence);
+                let result = create_object_from_buffer(&buffer);
+
+                assert_eq!(
+                    result,
+                    Ok(UnresolvedObject {
+                        shell: $leaf_object,
+                        children: None
+                    })
+                );
+            }
+        };
+    }
+
+    macro_rules! test_single_byte_object_decode_success {
+        ($test_case_name: ident, $byte: literal, $leaf_object: expr) => {
+            create_multibyte_object_decode_test!($test_case_name, [$byte], $leaf_object);
+        };
+    }
+
+    macro_rules! test_integer_decoding_success {
+        ($test_case_name: ident, unsigned, $byte_sequence: expr, $value: literal) => {
+            create_multibyte_object_decode_test!(
+                $test_case_name,
+                $byte_sequence,
+                Object::UnsignedInteger($value)
+            );
+        };
+    }
+
+    #[test]
+    fn empty_buffer_cannot_be_decoded() {
+        let result = create_object_from_buffer(&[]);
+        assert_eq!(result, Err(ParseError::InvalidDataOffset(1)))
+    }
+
+    //
+    // Test decoding objects with single byte encodings
+    //
+
+    test_single_byte_object_decode_success!(parses_null_from_buffer, 0x00, Object::Null);
+    test_single_byte_object_decode_success!(parses_false_from_buffer, 0x08, Object::Boolean(false));
+    test_single_byte_object_decode_success!(parses_true_from_buffer, 0x09, Object::Boolean(true));
+
+    #[test]
+    fn test_single_byte_object_decode_failures() {
+        let result = create_object_from_buffer(&[0x01]);
+        assert_eq!(result, Err(ParseError::InvalidContent(0x01)));
+
+        let result = create_object_from_buffer(&[0x07]);
+        assert_eq!(result, Err(ParseError::InvalidContent(0x07)));
+
+        // Patterns matching 0x1N, 0x2N, 0x3N, 0x4N, 0x5N, 0x6N, 0xAN, 0x7N
+        // are occupied by other types, and will be handled in other scenarios.
+        // Hence we try other single byte prefix patterns here:
+        let result = create_object_from_buffer(&[0x77]);
+        assert_eq!(result, Err(ParseError::InvalidPrefix(0x70)));
+
+        let result = create_object_from_buffer(&[0x84]);
+        assert_eq!(result, Err(ParseError::InvalidPrefix(0x80)));
+
+        let result = create_object_from_buffer(&[0xFF]);
+        assert_eq!(result, Err(ParseError::InvalidPrefix(0xF0)));
+    }
+
+    //
+    // Test successfully decoding single byte integers
+    //
+
+    test_integer_decoding_success!(parses_u8_0, unsigned, [0x10, 0x00], 0);
+    test_integer_decoding_success!(parses_u8_1, unsigned, [0x10, 0x12], 18);
+    test_integer_decoding_success!(parses_u8_2, unsigned, [0x10, 0xFF], 255);
+
+    #[test]
+    fn test_u8_decoding_failures() {
+        // Insufficient data
+        let result = create_object_from_buffer(&[0x10]);
+        assert_eq!(result, Err(ParseError::InvalidInteger(1, vec![])));
+
+        // Too much data in the buffer, this might happen if the body was
+        // partitioned incorrectly
+        let result = create_object_from_buffer(&[0x10, 0x00, 0x01]);
+        assert_eq!(result, Err(ParseError::InvalidInteger(1, vec![0x00, 0x01])));
+    }
+}
