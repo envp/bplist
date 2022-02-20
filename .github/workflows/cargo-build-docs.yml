@@ -9,11 +9,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@master
-      - uses: actions-rs/toolchain@v1
-        with:
-            toolchain: nightly
-            components: rustfmt
-            override: true
       - name: install-cargo-ghp-upload
         env:
           GHP_UPLOAD_VERSION: 0.3.2
