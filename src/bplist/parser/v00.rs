@@ -530,22 +530,103 @@ mod tests {
     }
 
     //
-    // Test successfully decoding single byte integers
+    // Test decoding single byte integers
     //
 
-    test_integer_decoding_success!(parses_u8_0, unsigned, [0x10, 0x00], 0);
-    test_integer_decoding_success!(parses_u8_1, unsigned, [0x10, 0x12], 18);
-    test_integer_decoding_success!(parses_u8_2, unsigned, [0x10, 0xFF], 255);
+    test_integer_decoding_success!(parses_u8_0, unsigned, [0x10, 0x00], 0x00);
+    test_integer_decoding_success!(parses_u8_1, unsigned, [0x10, 0x12], 0x12);
+    test_integer_decoding_success!(parses_u8_2, unsigned, [0x10, 0xFF], 0xFF);
 
     #[test]
     fn test_u8_decoding_failures() {
+        // Either of these might happen if the body was partitioned incorrectly
+
         // Insufficient data
         let result = create_object_from_buffer(&[0x10]);
         assert_eq!(result, Err(ParseError::InvalidInteger(1, vec![])));
 
-        // Too much data in the buffer, this might happen if the body was
-        // partitioned incorrectly
+        // Too much data in the buffer
         let result = create_object_from_buffer(&[0x10, 0x00, 0x01]);
         assert_eq!(result, Err(ParseError::InvalidInteger(1, vec![0x00, 0x01])));
+    }
+
+    // Decodes multibyte integers in big-endian order
+    test_integer_decoding_success!(parses_u16_0, unsigned, [0x11, 0x00, 0x00], 0x0000);
+    test_integer_decoding_success!(parses_u16_1, unsigned, [0x11, 0x12, 0x12], 0x1212);
+    test_integer_decoding_success!(parses_u16_2, unsigned, [0x11, 0xFF, 0xFF], 0xFFFF);
+
+    #[test]
+    fn test_u16_decoding_failures() {
+        // Either of these might happen if the body was partitioned incorrectly
+
+        // Insufficient data
+        let result = create_object_from_buffer(&[0x11]);
+        assert_eq!(result, Err(ParseError::InvalidInteger(2, vec![])));
+
+        let result = create_object_from_buffer(&[0x11, 0x00]);
+        assert_eq!(result, Err(ParseError::InvalidInteger(2, vec![0x00])));
+
+        // Too much data in the buffer
+        let result = create_object_from_buffer(&[0x11, 0x00, 0x01, 0x02]);
+        assert_eq!(
+            result,
+            Err(ParseError::InvalidInteger(2, vec![0x00, 0x01, 0x02]))
+        );
+    }
+
+    test_integer_decoding_success!(
+        parses_u32_0,
+        unsigned,
+        [0x12, 0x00, 0x00, 0x00, 0x00],
+        0x00000000
+    );
+    test_integer_decoding_success!(
+        parses_u32_1,
+        unsigned,
+        [0x12, 0x12, 0x34, 0x56, 0x78],
+        0x12345678
+    );
+    test_integer_decoding_success!(
+        parses_u32_2,
+        unsigned,
+        [0x12, 0xDE, 0xAD, 0xBE, 0xEF],
+        0xDEADBEEF
+    );
+    test_integer_decoding_success!(
+        parses_u32_3,
+        unsigned,
+        [0x12, 0xFF, 0xFF, 0xFF, 0xFF],
+        0xFFFFFFFF
+    );
+
+    #[test]
+    fn test_u32_decoding_failures() {
+        // Either of these might happen if the body was partitioned incorrectly
+
+        // Insufficient data
+        let result = create_object_from_buffer(&[0x12]);
+        assert_eq!(result, Err(ParseError::InvalidInteger(4, vec![])));
+
+        let result = create_object_from_buffer(&[0x12, 0x00]);
+        assert_eq!(result, Err(ParseError::InvalidInteger(4, vec![0x00])));
+
+        let result = create_object_from_buffer(&[0x12, 0x00, 0x00]);
+        assert_eq!(result, Err(ParseError::InvalidInteger(4, vec![0x00, 0x00])));
+
+        let result = create_object_from_buffer(&[0x12, 0x00, 0x00, 0x00]);
+        assert_eq!(
+            result,
+            Err(ParseError::InvalidInteger(4, vec![0x00, 0x00, 0x00]))
+        );
+
+        // Too much data in the buffer
+        let result = create_object_from_buffer(&[0x12, 0x00, 0x00, 0x00, 0x00, 0x00]);
+        assert_eq!(
+            result,
+            Err(ParseError::InvalidInteger(
+                4,
+                vec![0x00, 0x00, 0x00, 0x00, 0x00]
+            ))
+        );
     }
 }
