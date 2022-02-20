@@ -1,0 +1,39 @@
+name: docs
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+jobs:
+  cargo_checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@master
+      - uses: actions-rs/toolchain@v1
+        with:
+            toolchain: nightly
+            components: rustfmt
+            override: true
+      - name: setup
+        env:
+          GHP_UPLOAD_VERSION: 0.3.2
+        run: |
+          rustup component add rustdoc
+          rustc --version
+      - name: install-cargo-ghp-upload
+        uses: actions-rs/cargo@v1
+        with:
+          command: install
+          toolchain: nightly
+          args: --version "$GHP_UPLOAD_VERSION" cargo-ghp-upload
+      - name: build-docs
+        uses: actions-rs/cargo@v1
+        with:
+          args: cargo doc --verbose --document-private-items
+      - name: cargo-check
+        uses: actions-rs/cargo@v1
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          # env: 
+          #   GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          command: ghp-upload -vv
