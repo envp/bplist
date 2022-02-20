@@ -1,6 +1,5 @@
-mod errors;
-mod types;
-
+pub mod errors;
+pub mod types;
 pub mod parser;
 
 #[doc(inline)]
