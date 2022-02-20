@@ -1,4 +1,4 @@
-name: Cargo CI Checks
+name: clippy-check
 on:
   pull_request:
   push:
