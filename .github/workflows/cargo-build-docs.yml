@@ -14,13 +14,9 @@ jobs:
             toolchain: nightly
             components: rustfmt
             override: true
-      - name: setup
+      - name: install-cargo-ghp-upload
         env:
           GHP_UPLOAD_VERSION: 0.3.2
-        run: |
-          rustup component add rustdoc
-          rustc --version
-      - name: install-cargo-ghp-upload
         uses: actions-rs/cargo@v1
         with:
           command: install
