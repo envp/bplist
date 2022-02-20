@@ -21,7 +21,7 @@ jobs:
         with:
           command: install
           toolchain: nightly
-          args: --version "$GHP_UPLOAD_VERSION" cargo-ghp-upload
+          args: --version ${{ env.GHP_UPLOAD_VERSION }} cargo-ghp-upload
       - name: build-docs
         uses: actions-rs/cargo@v1
         with:
