@@ -1,0 +1,1 @@
+initSidebarItems({"enum":[["Object",""]],"struct":[["PList",""]],"type":[["ParseResult","A parse result returning either the remaining input, parsed output or the parse error"]]});
