@@ -7,7 +7,7 @@ use nom::{
     IResult,
 };
 
-use crate::bplist::{errors::ParseError, parser::Object, types::ParseResult, Trailer};
+use crate::bplist::{errors::ParseError, parser::Object, parser::Trailer, types::ParseResult};
 
 trait FromAscii {
     fn from_ascii(_: &[u8]) -> Result<String, FromAsciiError>;
@@ -435,7 +435,7 @@ pub fn parse_body<'a>(
     trailer: &Trailer,
     body_offset: u8,
     buffer: &'a [u8],
-) -> ParseResult<&'a [u8], ()> {
+) -> ParseResult<&'a [u8], Object> {
     let body = Body::new(buffer, trailer, body_offset as usize);
     let mut object_table: Vec<_> = Vec::with_capacity(trailer.num_objects);
 

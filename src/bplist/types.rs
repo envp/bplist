@@ -23,6 +23,6 @@ pub enum Object {
 
 #[derive(Debug)]
 pub struct PList {
-    root: Object,
-    num_objects: usize,
+    pub root: Object,
+    pub num_objects: usize,
 }

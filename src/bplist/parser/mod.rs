@@ -6,7 +6,7 @@ use nom::{
 use crate::bplist::{
     errors::{file_too_short, invalid_header, ParseError},
     types::ParseResult,
-    PList, Object
+    Object, PList,
 };
 
 mod v00;
@@ -137,12 +137,15 @@ pub fn parse(buffer: &[u8]) -> Result<PList, ParseError> {
             "Trailer must start immediately after offset table"
         );
 
-        let (_, _preferences) = match header.version {
+        let (_, body) = match header.version {
             Version::V00 => v00::parse_body(&trailer, body_offset as _, body),
             Version::V15 => todo!("bplist v1.5 body parsing not implemented!"),
             Version::V16 => todo!("bplist v1.6 body parsing not implemented!"),
         }?;
-        Ok(PList { header, trailer })
+        Ok(PList {
+            root: body,
+            num_objects: trailer.num_objects,
+        })
     }
 }
 

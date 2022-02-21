@@ -1,6 +1,6 @@
 pub mod errors;
-pub mod types;
 pub mod parser;
+pub mod types;
 
 #[doc(inline)]
-pub use types::{PList, Header, Object, Trailer, Version};
+pub use types::{Object, PList};
