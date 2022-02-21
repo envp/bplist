@@ -1,0 +1,21 @@
+language: rust
+
+cache:
+  - cargo
+
+before_deploy:
+  - cargo doc
+  - mkdir public
+  - cp -r target/doc public/
+  - pwd
+  - ls
+  - echo "<meta http-equiv=refresh content=0;url=book/html/index.html>" > public/index.html
+
+deploy:
+  provider: pages
+  skip-cleanup: true
+  github-token: $GITHUB_TOKEN
+  keep-history: false
+  local-dir: public
+  on:
+    branch: master
