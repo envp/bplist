@@ -18,4 +18,4 @@ deploy:
   keep-history: false
   local-dir: public
   on:
-    branch: master
+    branch: main
