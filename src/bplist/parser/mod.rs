@@ -6,10 +6,44 @@ use nom::{
 use crate::bplist::{
     errors::{file_too_short, invalid_header, ParseError},
     types::ParseResult,
-    BPList, Header, Object, Trailer, Version,
+    BPList, Object
 };
 
 mod v00;
+
+/// Properrty list header, only contains the field
+#[derive(Debug, PartialEq)]
+struct Header {
+    pub version: Version,
+}
+
+/// Plist versions that are possible
+#[derive(Debug, PartialEq)]
+pub enum Version {
+    V00,
+    V15,
+    V16,
+}
+
+/// Binary plist trailer describing how the content is encoded
+#[derive(Debug)]
+pub struct Trailer {
+    pub sort_version: u8,
+    /// Number of bytes in the file read for each unit offset in the
+    /// offset table. This is useful for large plists, where maximum value
+    /// of 255 for an offset isn't enough. This extends the maximum offset
+    /// value to 65536
+    pub offset_size: u8,
+    /// Number of bytes needed for each object reference encoded in a container
+    pub object_ref_size: u8,
+    /// Number of objects encoded in the file
+    pub num_objects: usize,
+    /// Index of the top level object, from the start of the offset table
+    pub top_object_idx: usize,
+    /// Offset of the offset table, from the start of the file. All contained
+    /// offsets are also relative to the start of the file
+    pub offset_table_offset: usize,
+}
 
 #[inline]
 /// Read the next `N` bytes from the inputs stream, advancing it in the
