@@ -6,7 +6,7 @@ use nom::{
 use crate::bplist::{
     errors::{file_too_short, invalid_header, ParseError},
     types::ParseResult,
-    BPList, Object
+    PList, Object
 };
 
 mod v00;
@@ -108,7 +108,7 @@ fn parse_trailer(buffer: &[u8]) -> ParseResult<&'_ [u8], Trailer> {
     ))
 }
 
-pub fn parse(buffer: &[u8]) -> Result<BPList, ParseError> {
+pub fn parse(buffer: &[u8]) -> Result<PList, ParseError> {
     // The smallest possible plist is the empty object, which is 1 object. Its
     // size comes out to:
     //
@@ -142,7 +142,7 @@ pub fn parse(buffer: &[u8]) -> Result<BPList, ParseError> {
             Version::V15 => todo!("bplist v1.5 body parsing not implemented!"),
             Version::V16 => todo!("bplist v1.6 body parsing not implemented!"),
         }?;
-        Ok(BPList { header, trailer })
+        Ok(PList { header, trailer })
     }
 }
 

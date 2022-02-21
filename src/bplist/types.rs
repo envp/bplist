@@ -22,7 +22,7 @@ pub enum Object {
 }
 
 #[derive(Debug)]
-pub struct BPList {
+pub struct PList {
     root: Object,
     num_objects: usize,
 }

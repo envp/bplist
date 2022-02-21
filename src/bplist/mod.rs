@@ -3,4 +3,4 @@ pub mod types;
 pub mod parser;
 
 #[doc(inline)]
-pub use types::{BPList, Header, Object, Trailer, Version};
+pub use types::{PList, Header, Object, Trailer, Version};
