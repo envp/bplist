@@ -245,7 +245,7 @@ fn create_utf16_string<'buf>(
         .collect::<Vec<_>>();
     let string =
         String::from_utf16(&chars).map_err(|_| ParseError::InvalidUtf16String(buffer.to_vec()))?;
-    Ok(UnresolvedObject::wrap(Object::AsciiString(string)))
+    Ok(UnresolvedObject::wrap(Object::Utf16String(string)))
 }
 
 /// Parse the buffer to create a partially initialized array object.

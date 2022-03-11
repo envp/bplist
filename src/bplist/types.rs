@@ -7,7 +7,7 @@ use crate::bplist::errors::ParseError;
 /// the parse error
 pub type ParseResult<I, O> = Result<(I, O), ParseError>;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Object {
     Null,
     Boolean(bool),
@@ -17,6 +17,7 @@ pub enum Object {
     DateTime(f64),
     Blob(Vec<u8>),
     AsciiString(String),
+    Utf16String(String),
     Array(Vec<Object>),
     Dictionary(HashMap<String, Object>),
 }
