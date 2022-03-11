@@ -431,11 +431,43 @@ impl<'a> Body<'a> {
     }
 }
 
+fn resolve_object_at(object_table: &[UnresolvedObject], idx: usize) -> Object {
+    let pending_obj = &object_table[idx];
+    let mut current_obj = pending_obj.shell.clone();
+    if pending_obj.needs_resolution() {
+        let child_indices = pending_obj
+            .children
+            .expect("Only objects with children can need further resolution");
+        match current_obj {
+            Object::Array(ref mut container) => {
+                for &child_idx in child_indices {
+                    let child_obj = resolve_object_at(object_table, child_idx as usize);
+                    container.push(child_obj);
+                }
+            }
+            Object::Dictionary(ref mut container) => {
+                for &[key_idx, value_idx] in child_indices.array_chunks::<2>() {
+                    let key_obj = resolve_object_at(object_table, key_idx as usize);
+                    let value_obj = resolve_object_at(object_table, value_idx as usize);
+
+                    let key = match key_obj {
+                        Object::AsciiString(k) | Object::Utf16String(k) => k,
+                        _ => unreachable!("Dictionary keys MUST be strings!"),
+                    };
+                    container.insert(key, value_obj);
+                }
+            }
+            _ => (),
+        }
+    };
+    current_obj
+}
+
 pub fn parse_body<'a>(
     trailer: &Trailer,
     body_offset: u8,
     buffer: &'a [u8],
-) -> ParseResult<&'a [u8], Object> {
+) -> Result<Object, ParseError> {
     let body = Body::new(buffer, trailer, body_offset as usize);
     let mut object_table: Vec<_> = Vec::with_capacity(trailer.num_objects);
 
@@ -451,9 +483,8 @@ pub fn parse_body<'a>(
         object_table.push(partial_obj);
     }
 
-    todo!("Resolve objects here");
-
-    unreachable!("Each plist MUST have a root object. How did you get here?");
+    let root_object = resolve_object_at(&object_table, 0);
+    Ok(root_object)
 }
 
 #[cfg(test)]

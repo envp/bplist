@@ -1,4 +1,6 @@
 fn main() {
     let data = include_bytes!("../examples/example.plist");
-    let _ = bplist::parse(data);
+    let res = bplist::parse(data);
+
+    dbg!(res);
 }
