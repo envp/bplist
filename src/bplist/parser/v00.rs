@@ -109,7 +109,7 @@ fn create_null_or_bool<'buf>(byte: u8) -> Result<UnresolvedObject<'buf>, ParseEr
         BYTE_MARKER_NULL => Ok(UnresolvedObject::wrap(Object::Null)),
         BYTE_MARKER_TRUE => Ok(UnresolvedObject::wrap(Object::Boolean(true))),
         BYTE_MARKER_FALSE => Ok(UnresolvedObject::wrap(Object::Boolean(false))),
-        _ => Err(ParseError::InvalidContent(byte)),
+        _ => Err(ParseError::InvalidNullOrBool(byte)),
     }
 }
 
@@ -307,7 +307,7 @@ fn create_dictionary<'buf>(
 /// initialized with the required space allocated to store child objects.
 ///
 /// This does not attempt to resolve the children referred to, opting to leave
-/// that to a later phase
+/// that to a later phase.
 ///
 /// # Arguments
 ///
@@ -315,7 +315,7 @@ fn create_dictionary<'buf>(
 fn create_object_from_buffer<'buf>(
     buffer: &'buf [u8],
 ) -> Result<UnresolvedObject<'buf>, ParseError> {
-    println!("parse ({:02} bytes): {:02x?}", buffer.len(), buffer);
+    eprintln!("parse ({:02} bytes): {:02x?}", buffer.len(), buffer);
     match buffer.first() {
         Some(&byte) => match (byte & 0xf0).try_into()? {
             TypeMarker::NullOrBool => create_null_or_bool::<'buf>(byte),
@@ -329,7 +329,7 @@ fn create_object_from_buffer<'buf>(
             }
             TypeMarker::Date => match byte {
                 BYTE_MARKER_DATE => create_date(&buffer[1..]),
-                _ => Err(ParseError::InvalidContent(byte)),
+                _ => Err(ParseError::MissingDateMarker(byte)),
             },
             TypeMarker::Data => create_data_from_buffer(byte & 0x0f, &buffer[1..]),
             TypeMarker::AsciiString => create_ascii_string(byte & 0x0f, &buffer[1..]),
@@ -356,38 +356,61 @@ impl<'a, 'buf> IntoIterator for &'a Body<'buf> {
     fn into_iter(self) -> Self::IntoIter {
         BodyIntoIterator {
             body: self,
-            index: 0,
+            content_length: self.contents.len(),
+            offsets: self.offset_table.chunks(self.offset_size).peekable(),
         }
+    }
+}
+
+/// Read the slice into a usize, zero-padding to the left of the buffer if
+/// necessary
+fn usize_from_byte_slice(buffer: &[u8]) -> usize {
+    assert!(!buffer.is_empty(), "Need some bytes to make a usize!");
+    if buffer.len() == 1 {
+        buffer[0] as usize
+    } else {
+        const NUM_USIZE_BYTES: usize = std::mem::size_of::<usize>();
+        let mut dest_bytes = [0u8; NUM_USIZE_BYTES];
+        assert!(
+            buffer.len() < NUM_USIZE_BYTES,
+            "Length of buffer ({}) cannot exceed the number of bytes in a usize ({})",
+            buffer.len(),
+            NUM_USIZE_BYTES
+        );
+        for (idx, value) in buffer.iter().enumerate() {
+            dest_bytes[NUM_USIZE_BYTES - buffer.len() + idx] = *value;
+        }
+        usize::from_be_bytes(dest_bytes)
     }
 }
 
 #[derive(Debug)]
 struct BodyIntoIterator<'a, 'buf: 'a> {
     body: &'a Body<'buf>,
-    index: usize,
+    content_length: usize,
+    offsets: std::iter::Peekable<std::slice::Chunks<'buf, u8>>,
 }
 
 impl<'a, 'buf> Iterator for BodyIntoIterator<'a, 'buf> {
     type Item = (usize, &'buf [u8]);
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.index < self.body.offset_table.len() {
-            let lower_offset = self
-                .body
-                .transform_offset(self.body.offset_table[self.index] as usize);
-            let upper_offset = match self.body.offset_table.get(self.index + 1) {
-                Some(&off) => self.body.transform_offset(off as usize),
-                None => self.body.contents.len(),
+        if let Some(chunk) = dbg!(self.offsets.next()) {
+            let lower = self.body.transform_offset(usize_from_byte_slice(chunk));
+            let upper = if let Some(ref upper_bytes) = dbg!(self.offsets.peek()) {
+                self.body
+                    .transform_offset(usize_from_byte_slice(upper_bytes))
+            } else {
+                self.content_length
             };
             debug_assert!(
-                upper_offset > lower_offset,
-                "Body chunk range must not be empty"
+                upper > lower,
+                "Body chunk range ({}..{}) must not be empty. Content Length={}",
+                lower,
+                upper,
+                self.content_length,
             );
-            self.index += 1;
-            Some((
-                lower_offset,
-                &self.body.contents[lower_offset..upper_offset],
-            ))
+            Some((lower, &self.body.contents[lower..upper]))
         } else {
             None
         }
@@ -413,9 +436,29 @@ impl<'a> Body<'a> {
         );
         let (content_bytes, offset_table_bytes) = buffer.split_at(table_offset);
         let addressable_offsets = &offset_table_bytes[trailer.top_object_idx..];
+        // The offset size used to construct the body affects how the offset
+        // table is read:
+        //
+        // For `offset_size` `1`, each element in the offset table is a usable
+        // offset. e.g.:
+        //      [8, 87, 112, 130, ...]
+        //
+        // However, for larger offset sizes:
+        // (e.g. N=2: when the body is longer than 256B) we must take
+        // non-overlapping chunks of (N) bytes, the previous table would be
+        // encoded as:
+        //
+        // ```ignore
+        //      [0, 8, 0, 87, 0, 112, 0, 130, ...]
+        //       |     |      |       |
+        //       ^^^^  ^^^^^  ^^^^^^  ^^^^^^
+        //       #1    #2     #3      #4
+        // ```
+        // Therefore, it is not possible to iterative over the body if the numbe
+        // of addressable offsets isn't divisible by the offset size.
         debug_assert_eq!(
             addressable_offsets.len(),
-            trailer.num_objects,
+            trailer.num_objects * trailer.offset_size as usize,
             "Number of addressable body offsets is different from number of objects encoded"
         );
         Self {
@@ -427,6 +470,11 @@ impl<'a> Body<'a> {
     }
 
     fn transform_offset(&self, offset: usize) -> usize {
+        debug_assert!(
+            self.offset_size * offset >= self.body_offset,
+            "Object (offset {}) starts before body!",
+            offset
+        );
         self.offset_size * offset - self.body_offset
     }
 }
@@ -491,6 +539,26 @@ pub fn parse_body<'a>(
 mod tests {
     use super::*;
 
+    #[test]
+    fn test_usize_from_byte_slice() {
+        assert_eq!(0usize, usize_from_byte_slice(&[0]));
+        assert_eq!(8usize, usize_from_byte_slice(&[0, 8]));
+        assert_eq!(65535usize, usize_from_byte_slice(&[255, 255]));
+        assert_eq!(20322189usize, usize_from_byte_slice(&[1, 54, 23, 141]));
+
+        #[cfg(target_pointer_width = "64")]
+        assert_eq!(
+            usize_from_byte_slice(&[5, 1, 54, 23, 141]),
+            21495158669usize
+        );
+    }
+
+    #[cfg(not(target_pointer_width = "64"))]
+    #[should_panic]
+    fn test_usize_from_byte_slice_panic() {
+        usize_from_byte_slice(&[5, 1, 54, 23, 141]);
+    }
+
     macro_rules! create_multibyte_object_decode_test {
         ($test_case_name: ident, $byte_sequence: expr, $leaf_object: expr) => {
             #[test]
@@ -542,10 +610,10 @@ mod tests {
     #[test]
     fn test_single_byte_object_decode_failures() {
         let result = create_object_from_buffer(&[0x01]);
-        assert_eq!(result, Err(ParseError::InvalidContent(0x01)));
+        assert_eq!(result, Err(ParseError::InvalidNullOrBool(0x01)));
 
         let result = create_object_from_buffer(&[0x07]);
-        assert_eq!(result, Err(ParseError::InvalidContent(0x07)));
+        assert_eq!(result, Err(ParseError::InvalidNullOrBool(0x07)));
 
         // Patterns matching 0x1N, 0x2N, 0x3N, 0x4N, 0x5N, 0x6N, 0xAN, 0x7N
         // are occupied by other types, and will be handled in other scenarios.
