@@ -1,5 +1,8 @@
 fn main() {
-    // let data = include_bytes!("../examples/example.plist");
-    let data = include_bytes!("/Library/Preferences/com.apple.Bluetooth.plist");
-    let _ = dbg!(bplist::parse(data));
+    if let Some(file_path) = std::env::args().nth(1) {
+        let data = std::fs::read(file_path).unwrap();
+        dbg!(bplist::parse(&data));
+    } else {
+
+    }
 }

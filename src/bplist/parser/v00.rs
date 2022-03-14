@@ -253,6 +253,7 @@ fn create_utf16_string<'buf>(
 /// offsets to them for resolution at a later time
 fn create_array<'buf>(
     size_marker: u8,
+    ref_size: usize,
     buffer: &'buf [u8],
 ) -> Result<UnresolvedObject<'buf>, ParseError> {
     let (child_offsets, num_elems) = match size_marker {
@@ -279,6 +280,7 @@ fn create_array<'buf>(
 /// offsets to them for resolution at a later time
 fn create_dictionary<'buf>(
     size_marker: u8,
+    ref_size: usize,
     buffer: &'buf [u8],
 ) -> Result<UnresolvedObject<'buf>, ParseError> {
     // Doesn't handle the case of 0xDF
@@ -313,6 +315,7 @@ fn create_dictionary<'buf>(
 ///
 /// `buffer` - The byte buffer containing exactly one serialized object.
 fn create_object_from_buffer<'buf>(
+    object_ref_size: usize,
     buffer: &'buf [u8],
 ) -> Result<UnresolvedObject<'buf>, ParseError> {
     eprintln!("parse ({:02} bytes): {:02x?}", buffer.len(), buffer);
@@ -334,8 +337,8 @@ fn create_object_from_buffer<'buf>(
             TypeMarker::Data => create_data_from_buffer(byte & 0x0f, &buffer[1..]),
             TypeMarker::AsciiString => create_ascii_string(byte & 0x0f, &buffer[1..]),
             TypeMarker::Unicode16String => create_utf16_string(byte & 0x0f, &buffer[1..]),
-            TypeMarker::Array => create_array(byte & 0x0f, &buffer[1..]),
-            TypeMarker::Dictionary => create_dictionary(byte & 0x0f, &buffer[1..]),
+            TypeMarker::Array => create_array(byte & 0x0f, object_ref_size, &buffer[1..]),
+            TypeMarker::Dictionary => create_dictionary(byte & 0x0f, object_ref_size, &buffer[1..]),
         },
         None => Err(ParseError::InvalidDataOffset(1)),
     }
@@ -395,9 +398,9 @@ impl<'a, 'buf> Iterator for BodyIntoIterator<'a, 'buf> {
     type Item = (usize, &'buf [u8]);
 
     fn next(&mut self) -> Option<Self::Item> {
-        if let Some(chunk) = dbg!(self.offsets.next()) {
+        if let Some(chunk) = self.offsets.next() {
             let lower = self.body.transform_offset(usize_from_byte_slice(chunk));
-            let upper = if let Some(ref upper_bytes) = dbg!(self.offsets.peek()) {
+            let upper = if let Some(ref upper_bytes) = self.offsets.peek() {
                 self.body
                     .transform_offset(usize_from_byte_slice(upper_bytes))
             } else {
@@ -518,16 +521,17 @@ pub fn parse_body<'a>(
 ) -> Result<Object, ParseError> {
     let body = Body::new(buffer, trailer, body_offset as usize);
     let mut object_table: Vec<_> = Vec::with_capacity(trailer.num_objects);
+    let object_ref_size = trailer.object_ref_size as usize;
 
     for (offset, chunk) in &body {
         // Translate the offsets of errors relative to the start of the file
-        let partial_obj = create_object_from_buffer(chunk);
-        let partial_obj = partial_obj.map_err(|err| match err {
-            ParseError::InvalidDataOffset(o) => {
-                ParseError::InvalidDataOffset(o + offset + body_offset as usize)
-            }
-            _ => err,
-        })?;
+        let partial_obj =
+            create_object_from_buffer(object_ref_size, chunk).map_err(|err| match err {
+                ParseError::InvalidDataOffset(o) => {
+                    ParseError::InvalidDataOffset(o + offset + body_offset as usize)
+                }
+                _ => err,
+            })?;
         object_table.push(partial_obj);
     }
 
@@ -564,7 +568,7 @@ mod tests {
             #[test]
             fn $test_case_name() {
                 let buffer = Vec::from($byte_sequence);
-                let result = create_object_from_buffer(&buffer);
+                let result = create_object_from_buffer(1, &buffer);
 
                 assert_eq!(
                     result,
@@ -595,7 +599,7 @@ mod tests {
 
     #[test]
     fn empty_buffer_cannot_be_decoded() {
-        let result = create_object_from_buffer(&[]);
+        let result = create_object_from_buffer(1, &[]);
         assert_eq!(result, Err(ParseError::InvalidDataOffset(1)))
     }
 
@@ -609,22 +613,22 @@ mod tests {
 
     #[test]
     fn test_single_byte_object_decode_failures() {
-        let result = create_object_from_buffer(&[0x01]);
+        let result = create_object_from_buffer(1, &[0x01]);
         assert_eq!(result, Err(ParseError::InvalidNullOrBool(0x01)));
 
-        let result = create_object_from_buffer(&[0x07]);
+        let result = create_object_from_buffer(1, &[0x07]);
         assert_eq!(result, Err(ParseError::InvalidNullOrBool(0x07)));
 
         // Patterns matching 0x1N, 0x2N, 0x3N, 0x4N, 0x5N, 0x6N, 0xAN, 0x7N
         // are occupied by other types, and will be handled in other scenarios.
         // Hence we try other single byte prefix patterns here:
-        let result = create_object_from_buffer(&[0x77]);
+        let result = create_object_from_buffer(1, &[0x77]);
         assert_eq!(result, Err(ParseError::InvalidPrefix(0x70)));
 
-        let result = create_object_from_buffer(&[0x84]);
+        let result = create_object_from_buffer(1, &[0x84]);
         assert_eq!(result, Err(ParseError::InvalidPrefix(0x80)));
 
-        let result = create_object_from_buffer(&[0xFF]);
+        let result = create_object_from_buffer(1, &[0xFF]);
         assert_eq!(result, Err(ParseError::InvalidPrefix(0xF0)));
     }
 
@@ -641,11 +645,11 @@ mod tests {
         // Either of these might happen if the body was partitioned incorrectly
 
         // Insufficient data
-        let result = create_object_from_buffer(&[0x10]);
+        let result = create_object_from_buffer(1, &[0x10]);
         assert_eq!(result, Err(ParseError::InvalidInteger(1, vec![])));
 
         // Too much data in the buffer
-        let result = create_object_from_buffer(&[0x10, 0x00, 0x01]);
+        let result = create_object_from_buffer(1, &[0x10, 0x00, 0x01]);
         assert_eq!(result, Err(ParseError::InvalidInteger(1, vec![0x00, 0x01])));
     }
 
@@ -659,14 +663,14 @@ mod tests {
         // Either of these might happen if the body was partitioned incorrectly
 
         // Insufficient data
-        let result = create_object_from_buffer(&[0x11]);
+        let result = create_object_from_buffer(1, &[0x11]);
         assert_eq!(result, Err(ParseError::InvalidInteger(2, vec![])));
 
-        let result = create_object_from_buffer(&[0x11, 0x00]);
+        let result = create_object_from_buffer(1, &[0x11, 0x00]);
         assert_eq!(result, Err(ParseError::InvalidInteger(2, vec![0x00])));
 
         // Too much data in the buffer
-        let result = create_object_from_buffer(&[0x11, 0x00, 0x01, 0x02]);
+        let result = create_object_from_buffer(1, &[0x11, 0x00, 0x01, 0x02]);
         assert_eq!(
             result,
             Err(ParseError::InvalidInteger(2, vec![0x00, 0x01, 0x02]))
@@ -703,23 +707,23 @@ mod tests {
         // Either of these might happen if the body was partitioned incorrectly
 
         // Insufficient data
-        let result = create_object_from_buffer(&[0x12]);
+        let result = create_object_from_buffer(1, &[0x12]);
         assert_eq!(result, Err(ParseError::InvalidInteger(4, vec![])));
 
-        let result = create_object_from_buffer(&[0x12, 0x00]);
+        let result = create_object_from_buffer(1, &[0x12, 0x00]);
         assert_eq!(result, Err(ParseError::InvalidInteger(4, vec![0x00])));
 
-        let result = create_object_from_buffer(&[0x12, 0x00, 0x00]);
+        let result = create_object_from_buffer(1, &[0x12, 0x00, 0x00]);
         assert_eq!(result, Err(ParseError::InvalidInteger(4, vec![0x00, 0x00])));
 
-        let result = create_object_from_buffer(&[0x12, 0x00, 0x00, 0x00]);
+        let result = create_object_from_buffer(1, &[0x12, 0x00, 0x00, 0x00]);
         assert_eq!(
             result,
             Err(ParseError::InvalidInteger(4, vec![0x00, 0x00, 0x00]))
         );
 
         // Too much data in the buffer
-        let result = create_object_from_buffer(&[0x12, 0x00, 0x00, 0x00, 0x00, 0x00]);
+        let result = create_object_from_buffer(1, &[0x12, 0x00, 0x00, 0x00, 0x00, 0x00]);
         assert_eq!(
             result,
             Err(ParseError::InvalidInteger(
