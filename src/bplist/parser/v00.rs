@@ -503,7 +503,7 @@ fn resolve_object_at(object_table: &[UnresolvedObject], idx: usize) -> Object {
 
                     let key = match key_obj {
                         Object::AsciiString(k) | Object::Utf16String(k) => k,
-                        _ => unreachable!("Dictionary keys MUST be strings!"),
+                        _ => unreachable!("Invalid dictionary key: {:?}", key_obj),
                     };
                     container.insert(key, value_obj);
                 }
