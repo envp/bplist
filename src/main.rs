@@ -3,6 +3,5 @@ fn main() {
         let data = std::fs::read(file_path).unwrap();
         dbg!(bplist::parse(&data));
     } else {
-
     }
 }

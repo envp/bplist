@@ -478,7 +478,7 @@ impl<'a> Body<'a> {
             "Object (offset {}) starts before body!",
             offset
         );
-        self.offset_size * offset - self.body_offset
+        offset - self.body_offset
     }
 }
 
