@@ -129,11 +129,12 @@ pub fn parse(buffer: &[u8]) -> Result<PList, ParseError> {
             32,
             "binary plist trailers MUST be 32 bytes long!"
         );
-        let trailer_offset = body_offset + rest.len() - 32;
+        let trailer_offset = body_offset + body.len();
         let (_, trailer) = parse_trailer(trailing)?;
+        dbg!(&trailer);
         debug_assert_eq!(
             trailer_offset,
-            trailer.offset_table_offset + (trailer.num_objects * trailer.object_ref_size as usize),
+            trailer.offset_table_offset + (trailer.num_objects * trailer.offset_size as usize),
             "Trailer must start immediately after offset table"
         );
 
