@@ -171,10 +171,8 @@ fn create_data_from_buffer<'buf>(
     size_marker: u8,
     data: &'buf [u8],
 ) -> Result<UnresolvedObject<'_>, ParseError> {
-    let (buffer, num_bytes) = match size_marker {
-        INTEGER_SIZE_FOLLOWS => parse_size_marker(size_marker, data),
-        num_bytes => Ok((data, num_bytes as usize)),
-    }?;
+    let (buffer, num_bytes) = parse_size_marker(size_marker, data)?;
+
     debug_assert_eq!(
         num_bytes as usize,
         buffer.len(),
@@ -256,10 +254,7 @@ fn create_array<'buf>(
     ref_size: usize,
     buffer: &'buf [u8],
 ) -> Result<UnresolvedObject<'buf>, ParseError> {
-    let (child_offsets, num_elems) = match size_marker {
-        INTEGER_SIZE_FOLLOWS => parse_size_marker(size_marker, buffer),
-        num_elems => Ok((buffer, num_elems as usize)),
-    }?;
+    let (child_offsets, num_elems) = parse_size_marker(size_marker, buffer)?;
     debug_assert_eq!(
         num_elems,
         buffer.len(),
@@ -283,11 +278,8 @@ fn create_dictionary<'buf>(
     ref_size: usize,
     buffer: &'buf [u8],
 ) -> Result<UnresolvedObject<'buf>, ParseError> {
-    // Doesn't handle the case of 0xDF
-    let (child_offsets, num_pairs) = match size_marker {
-        INTEGER_SIZE_FOLLOWS => parse_size_marker(size_marker, buffer),
-        num_pairs => Ok((buffer, num_pairs as usize)),
-    }?;
+    let (child_offsets, num_pairs) = parse_size_marker(size_marker, buffer)?;
+
     debug_assert_eq!(
         2 * num_pairs,
         child_offsets.len(),
