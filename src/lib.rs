@@ -1,5 +1,3 @@
-#![feature(array_chunks)]
-
 mod bplist;
 
 pub use crate::bplist::errors;

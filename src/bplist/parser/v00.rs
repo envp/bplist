@@ -101,6 +101,11 @@ impl<'a> UnresolvedObject<'a> {
     /// children
     fn needs_resolution(&self) -> bool {
         self.children.map_or(false, |offsets| !offsets.is_empty())
+    /// The number of child objects that are directly referenced by this object
+    ///
+    /// NOTE: This doesn't count the number of unique children, but only
+    fn num_children(&self) -> usize {
+        self.children.map_or(0, |offsets| offsets.len())
     }
 }
 
@@ -489,7 +494,16 @@ fn resolve_object_at(object_table: &[UnresolvedObject], idx: usize) -> Object {
                 }
             }
             Object::Dictionary(ref mut container) => {
-                for &[key_idx, value_idx] in child_indices.array_chunks::<2>() {
+                let num_keys: usize = pending_obj.num_children() / 2;
+                debug_assert_eq!(
+                    num_keys * 2,
+                    pending_obj.num_children(),
+                    "Dictionary has a key with no value?!"
+                );
+                for (&key_idx, &value_idx) in child_indices
+                    .iter()
+                    .zip(child_indices.iter().skip(num_keys))
+                {
                     let key_obj = resolve_object_at(object_table, key_idx as usize);
                     let value_obj = resolve_object_at(object_table, value_idx as usize);
 
