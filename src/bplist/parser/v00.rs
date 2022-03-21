@@ -95,12 +95,13 @@ impl<'a> UnresolvedObject<'a> {
         }
     }
 
-    /// Check if the current object needs to be resolved any further.
-    ///
-    /// This will only return true if an object has a non-empty collection of
-    /// children
-    fn needs_resolution(&self) -> bool {
-        self.children.map_or(false, |offsets| !offsets.is_empty())
+    /// Return if the current object is a "terminal" object. These are objects
+    /// that cannot contain other objects, usually being simple data types such
+    /// as strings, numbers, booleans, blob data.
+    fn is_terminal(&self) -> bool {
+        self.children.is_none()
+    }
+
     /// The number of child objects that are directly referenced by this object
     ///
     /// NOTE: This doesn't count the number of unique children, but only
@@ -479,10 +480,12 @@ impl<'a> Body<'a> {
     }
 }
 
+/// Takes an object table and an object index to resolve, and returns the
+/// completely resolved object.
 fn resolve_object_at(object_table: &[UnresolvedObject], idx: usize) -> Object {
     let pending_obj = &object_table[idx];
     let mut current_obj = pending_obj.shell.clone();
-    if pending_obj.needs_resolution() {
+    if !pending_obj.is_terminal() {
         let child_indices = pending_obj
             .children
             .expect("Only objects with children can need further resolution");
