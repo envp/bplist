@@ -1,5 +1,6 @@
 [package]
-name = "bplist"
+name = "plist-utils"
+description = "Lightweight, fast utilities and libraries for dealing with property lists"
 version = "0.1.0"
 edition = "2021"
 
