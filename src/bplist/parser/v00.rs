@@ -171,7 +171,7 @@ fn create_date<'buf>(data: &'buf [u8]) -> Result<UnresolvedObject<'_>, ParseErro
 }
 
 /// Reads arbitrary binary data into a bytebuffer
-fn create_data_from_buffer<'buf>(
+fn create_blob_from_buffer<'buf>(
     size_marker: u8,
     data: &'buf [u8],
 ) -> Result<UnresolvedObject<'_>, ParseError> {
@@ -330,7 +330,7 @@ fn create_object_from_buffer<'buf>(
                 BYTE_MARKER_DATE => create_date(&buffer[1..]),
                 _ => Err(ParseError::MissingDateMarker(byte)),
             },
-            TypeMarker::Data => create_data_from_buffer(byte & 0x0f, &buffer[1..]),
+            TypeMarker::Data => create_blob_from_buffer(byte & 0x0f, &buffer[1..]),
             TypeMarker::AsciiString => create_ascii_string(byte & 0x0f, &buffer[1..]),
             TypeMarker::Unicode16String => create_utf16_string(byte & 0x0f, &buffer[1..]),
             TypeMarker::Array => create_array(byte & 0x0f, object_ref_size, &buffer[1..]),
