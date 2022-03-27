@@ -126,8 +126,6 @@ fn create_null_or_bool<'buf>(byte: u8) -> Result<UnresolvedObject<'buf>, ParseEr
 /// 2. Interprets 8, 16 byte integers are interpreted as signed
 /// 3. Fail if numbers wider than 16 bytes are provided
 fn create_integer<'buf>(width: u8, data: &'buf [u8]) -> Result<UnresolvedObject<'_>, ParseError> {
-    // This is likely better than an `if` because we expect the `width` to be
-    // an integer power of 2
     let parser: Box<dyn FnMut(&'buf [u8]) -> IResult<&'_ [u8], Object>> = match width {
         1 => Box::new(map(be_u8, |r| Object::UnsignedInteger(r.into()))),
         2 => Box::new(map(be_u16, |r| Object::UnsignedInteger(r.into()))),
