@@ -1,1 +1,1 @@
-window.ALL_CRATES = ["bplist","memchr","minimal_lexical","nom"];
+window.ALL_CRATES = ["memchr","minimal_lexical","nom","plist_utils"];
