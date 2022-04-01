@@ -36,24 +36,96 @@
 <span id="34">34</span>
 <span id="35">35</span>
 <span id="36">36</span>
+<span id="37">37</span>
+<span id="38">38</span>
+<span id="39">39</span>
+<span id="40">40</span>
+<span id="41">41</span>
+<span id="42">42</span>
+<span id="43">43</span>
+<span id="44">44</span>
+<span id="45">45</span>
+<span id="46">46</span>
+<span id="47">47</span>
+<span id="48">48</span>
+<span id="49">49</span>
+<span id="50">50</span>
+<span id="51">51</span>
+<span id="52">52</span>
+<span id="53">53</span>
+<span id="54">54</span>
+<span id="55">55</span>
+<span id="56">56</span>
+<span id="57">57</span>
+<span id="58">58</span>
+<span id="59">59</span>
+<span id="60">60</span>
+<span id="61">61</span>
+<span id="62">62</span>
+<span id="63">63</span>
+<span id="64">64</span>
+<span id="65">65</span>
+<span id="66">66</span>
+<span id="67">67</span>
+<span id="68">68</span>
+<span id="69">69</span>
+<span id="70">70</span>
+<span id="71">71</span>
+<span id="72">72</span>
 </pre><pre class="rust"><code><span class="kw">pub</span> <span class="kw">type</span> <span class="ident">NomErr</span><span class="op">&lt;</span><span class="ident">Input</span><span class="op">&gt;</span> <span class="op">=</span> <span class="ident">nom::Err</span><span class="op">&lt;</span><span class="ident">nom::error::Error</span><span class="op">&lt;</span><span class="ident">Input</span><span class="op">&gt;</span><span class="op">&gt;</span>;
 
 <span class="attribute">#[<span class="ident">derive</span>(<span class="ident">Debug</span>, <span class="ident">PartialEq</span>)]</span>
 <span class="kw">pub</span> <span class="kw">enum</span> <span class="ident">ParseError</span> {
+    <span class="doccomment">/// Input ended too soon.</span>
     <span class="ident">FileTooShort</span>(<span class="ident">usize</span>),
+
+    <span class="doccomment">/// The byte sequence cannot represent a valid ASCII string.</span>
     <span class="ident">InvalidAsciiString</span>(<span class="ident">Vec</span><span class="op">&lt;</span><span class="ident">u8</span><span class="op">&gt;</span>),
+
+    <span class="doccomment">/// An out of bounds error upon using one of the offsets derived from the</span>
+    <span class="doccomment">/// buffer.</span>
     <span class="ident">InvalidDataOffset</span>(<span class="ident">usize</span>),
+
+    <span class="doccomment">/// The serialized date object cannot be parsed.</span>
+    <span class="doccomment">///</span>
+    <span class="doccomment">/// Potential reasons include:</span>
+    <span class="doccomment">/// * Buffer length doesn&#39;t match 4 bytes.</span>
+    <span class="doccomment">/// * Buffer doesn&#39;t contain a valid `f64`</span>
     <span class="ident">InvalidDate</span>(<span class="ident">Vec</span><span class="op">&lt;</span><span class="ident">u8</span><span class="op">&gt;</span>),
+
+    <span class="doccomment">/// The serialized floating point number could not be parsed.</span>
+    <span class="doccomment">///</span>
+    <span class="doccomment">/// Potential reasons include:</span>
+    <span class="doccomment">/// * Wrong width (something other than 1, 2, or 4.</span>
+    <span class="doccomment">/// * The number of bytes didn&#39;t match what the width indicated.</span>
+    <span class="doccomment">/// * The buffer could not be parsed into a floating point number.</span>
     <span class="ident">InvalidFloat</span>(<span class="ident">u8</span>, <span class="ident">Vec</span><span class="op">&lt;</span><span class="ident">u8</span><span class="op">&gt;</span>),
+
+    <span class="doccomment">/// The file header was not recognized.</span>
     <span class="ident">InvalidHeaderTag</span>,
+
+    <span class="doccomment">/// </span>
     <span class="ident">InvalidInteger</span>(<span class="ident">u8</span>, <span class="ident">Vec</span><span class="op">&lt;</span><span class="ident">u8</span><span class="op">&gt;</span>),
+
+    <span class="doccomment">/// Expected a null or bool due to high 4 bits being 0x0, but could not</span>
+    <span class="doccomment">/// match the low 4 bits with any of `null` (`0x00`), `true` (`0x07`),</span>
+    <span class="doccomment">/// or `false` (`0x08`).</span>
     <span class="ident">InvalidNullOrBool</span>(<span class="ident">u8</span>),
+
+    <span class="doccomment">/// The prefix (4 bits) could not be recognized.</span>
     <span class="ident">InvalidPrefix</span>(<span class="ident">u8</span>),
+
+    <span class="doccomment">/// The byte sequence cannot represent a valid UTF-16 string.</span>
     <span class="ident">InvalidUtf16String</span>(<span class="ident">Vec</span><span class="op">&lt;</span><span class="ident">u8</span><span class="op">&gt;</span>),
+
+    <span class="doccomment">/// 0x33 is the date marker. This is used when the parser sees a 0x30 in</span>
+    <span class="doccomment">/// the high 4 bits, but sees something other than 0x03 in the lower 4 bits.</span>
     <span class="ident">MissingDateMarker</span>(<span class="ident">u8</span>),
-    <span class="comment">// FIXME: Rework error reporting for more detailed error markers</span>
-    <span class="comment">// possible to use error_chain ?</span>
+
+    <span class="doccomment">/// Generic nom error that has not yet been classified.</span>
     <span class="ident">NomError</span>,
+
+    <span class="doccomment">/// The property list version is not yet supported by the library.</span>
     <span class="ident">UnsupportedVersion</span>,
 }
 
