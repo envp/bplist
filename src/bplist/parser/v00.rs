@@ -1,5 +1,5 @@
 //! Implements the body parser for binary plist format (magic bytes `bplist00`)
-use std::collections::HashMap;
+use std::{collections::HashMap, slice::Chunks};
 
 use nom::{
     combinator::{all_consuming, fail, map},
@@ -78,10 +78,42 @@ mod constants {
 
 use constants::*;
 
+#[derive(Debug, PartialEq, Clone, Copy)]
+struct Children<'a> {
+    offsets: &'a [u8],
+    ref_size: usize,
+}
+
+impl<'a> Children<'a> {
+    fn new(offsets: &'a [u8], ref_size: usize) -> Self {
+        debug_assert_eq!(
+            offsets.len() % ref_size,
+            0,
+            "The number of offsets must be evenly divisible by the object reference size"
+        );
+        Self { offsets, ref_size }
+    }
+
+    fn len(&self) -> usize {
+        self.offsets.len() / self.ref_size
+    }
+}
+
+impl<'a> IntoIterator for Children<'a> {
+    type Item = usize;
+    type IntoIter = std::iter::Map<Chunks<'a, u8>, fn(&[u8]) -> usize>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.offsets
+            .chunks(self.ref_size)
+            .map(usize_from_byte_slice)
+    }
+}
+
 #[derive(Debug, PartialEq)]
 struct UnresolvedObject<'a> {
     shell: Object,
-    children: Option<&'a [u8]>,
+    children: Option<Children<'a>>,
 }
 
 impl<'a> UnresolvedObject<'a> {
@@ -241,7 +273,7 @@ fn create_utf16_string<'buf>(
     let chars = buffer
         .chunks(2)
         .map(|w| {
-            let bytes: [u8; 2] = w[..3].try_into().expect("Unable to convert slice to array");
+            let bytes: [u8; 2] = w[..2].try_into().expect("Unable to convert slice to array");
             u16::from_be_bytes(bytes)
         })
         .collect::<Vec<_>>();
@@ -260,14 +292,14 @@ fn create_array<'buf>(
 ) -> Result<UnresolvedObject<'buf>, ParseError> {
     let (child_offsets, num_elems) = parse_size_marker(size_marker, buffer)?;
     debug_assert_eq!(
-        num_elems,
-        buffer.len(),
+        ref_size * num_elems,
+        child_offsets.len(),
         "Buffer has incorrect number of array elements"
     );
     Ok(UnresolvedObject {
         shell: Object::Array(Vec::with_capacity(num_elems)),
         children: if !child_offsets.is_empty() {
-            Some(child_offsets)
+            Some(Children::new(child_offsets, ref_size))
         } else {
             None
         },
@@ -285,14 +317,14 @@ fn create_dictionary<'buf>(
     let (child_offsets, num_pairs) = parse_size_marker(size_marker, buffer)?;
 
     debug_assert_eq!(
-        2 * num_pairs,
+        ref_size * 2 * num_pairs,
         child_offsets.len(),
         "Buffer must contain the correct number of K-V pairs"
     );
     Ok(UnresolvedObject {
         shell: Object::Dictionary(HashMap::with_capacity(num_pairs)),
         children: if !child_offsets.is_empty() {
-            Some(child_offsets)
+            Some(Children::new(child_offsets, ref_size))
         } else {
             None
         },
@@ -489,8 +521,8 @@ fn resolve_object_at(object_table: &[UnresolvedObject], idx: usize) -> Object {
             .expect("Only objects with children can need further resolution");
         match current_obj {
             Object::Array(ref mut container) => {
-                for &child_idx in child_indices {
-                    let child_obj = resolve_object_at(object_table, child_idx as usize);
+                for child_idx in child_indices {
+                    let child_obj = resolve_object_at(object_table, child_idx);
                     container.push(child_obj);
                 }
             }
@@ -501,12 +533,11 @@ fn resolve_object_at(object_table: &[UnresolvedObject], idx: usize) -> Object {
                     pending_obj.num_children(),
                     "Dictionary has a key with no value?!"
                 );
-                for (&key_idx, &value_idx) in child_indices
-                    .iter()
-                    .zip(child_indices.iter().skip(num_keys))
-                {
-                    let key_obj = resolve_object_at(object_table, key_idx as usize);
-                    let value_obj = resolve_object_at(object_table, value_idx as usize);
+                let key_iter = child_indices.into_iter();
+                let value_iter = child_indices.clone().into_iter().skip(num_keys);
+                for (key_idx, value_idx) in key_iter.zip(value_iter) {
+                    let key_obj = resolve_object_at(object_table, key_idx);
+                    let value_obj = resolve_object_at(object_table, value_idx);
 
                     let key = match key_obj {
                         Object::AsciiString(k) | Object::Utf16String(k) => k,
