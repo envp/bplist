@@ -72,6 +72,7 @@
 <span id="70">70</span>
 <span id="71">71</span>
 <span id="72">72</span>
+<span id="73">73</span>
 </pre><pre class="rust"><code><span class="kw">pub</span> <span class="kw">type</span> <span class="ident">NomErr</span><span class="op">&lt;</span><span class="ident">Input</span><span class="op">&gt;</span> <span class="op">=</span> <span class="ident">nom::Err</span><span class="op">&lt;</span><span class="ident">nom::error::Error</span><span class="op">&lt;</span><span class="ident">Input</span><span class="op">&gt;</span><span class="op">&gt;</span>;
 
 <span class="attribute">#[<span class="ident">derive</span>(<span class="ident">Debug</span>, <span class="ident">PartialEq</span>)]</span>
@@ -104,7 +105,8 @@
     <span class="doccomment">/// The file header was not recognized.</span>
     <span class="ident">InvalidHeaderTag</span>,
 
-    <span class="doccomment">/// </span>
+    <span class="doccomment">/// The serialized integer could not be read. This is most likely due to</span>
+    <span class="doccomment">/// the width not matching the number of bytes.</span>
     <span class="ident">InvalidInteger</span>(<span class="ident">u8</span>, <span class="ident">Vec</span><span class="op">&lt;</span><span class="ident">u8</span><span class="op">&gt;</span>),
 
     <span class="doccomment">/// Expected a null or bool due to high 4 bits being 0x0, but could not</span>
