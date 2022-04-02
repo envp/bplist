@@ -30,7 +30,8 @@ pub enum ParseError {
     /// The file header was not recognized.
     InvalidHeaderTag,
 
-    /// 
+    /// The serialized integer could not be read. This is most likely due to
+    /// the width not matching the number of bytes.
     InvalidInteger(u8, Vec<u8>),
 
     /// Expected a null or bool due to high 4 bits being 0x0, but could not
