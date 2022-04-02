@@ -1,6 +1,8 @@
 [package]
 name = "plist-utils"
 description = "Utilities and libraries for dealing with property lists"
+categories = ["configuration", "parser-implementations", "encoding"]
+license = "MIT"
 version = "0.1.0"
 edition = "2021"
 
