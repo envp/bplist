@@ -61,7 +61,7 @@ impl TryFrom<u8> for TypeMarker {
             0x60 => Ok(Self::Unicode16String),
             0xA0 => Ok(Self::Array),
             0xD0 => Ok(Self::Dictionary),
-            byte => Err(ParseError::InvalidPrefix(byte)),
+            byte => Err(ParseError::InvalidMarker(byte)),
         }
     }
 }
@@ -661,13 +661,13 @@ mod tests {
         // are occupied by other types, and will be handled in other scenarios.
         // Hence we try other single byte prefix patterns here:
         let result = create_object_from_buffer(1, &[0x77]);
-        assert_eq!(result, Err(ParseError::InvalidPrefix(0x70)));
+        assert_eq!(result, Err(ParseError::InvalidMarker(0x70)));
 
         let result = create_object_from_buffer(1, &[0x84]);
-        assert_eq!(result, Err(ParseError::InvalidPrefix(0x80)));
+        assert_eq!(result, Err(ParseError::InvalidMarker(0x80)));
 
         let result = create_object_from_buffer(1, &[0xFF]);
-        assert_eq!(result, Err(ParseError::InvalidPrefix(0xF0)));
+        assert_eq!(result, Err(ParseError::InvalidMarker(0xF0)));
     }
 
     //

@@ -40,7 +40,7 @@ pub enum ParseError {
     InvalidNullOrBool(u8),
 
     /// The prefix (4 bits) could not be recognized.
-    InvalidPrefix(u8),
+    InvalidMarker(u8),
 
     /// The byte sequence cannot represent a valid UTF-16 string.
     InvalidUtf16String(Vec<u8>),
