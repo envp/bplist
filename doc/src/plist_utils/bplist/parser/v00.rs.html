@@ -836,7 +836,7 @@
             <span class="number">0x60</span> =&gt; <span class="prelude-val">Ok</span>(<span class="ident"><span class="self">Self</span>::Unicode16String</span>),
             <span class="number">0xA0</span> =&gt; <span class="prelude-val">Ok</span>(<span class="ident"><span class="self">Self</span>::Array</span>),
             <span class="number">0xD0</span> =&gt; <span class="prelude-val">Ok</span>(<span class="ident"><span class="self">Self</span>::Dictionary</span>),
-            <span class="ident">byte</span> =&gt; <span class="prelude-val">Err</span>(<span class="ident">ParseError::InvalidPrefix</span>(<span class="ident">byte</span>)),
+            <span class="ident">byte</span> =&gt; <span class="prelude-val">Err</span>(<span class="ident">ParseError::InvalidMarker</span>(<span class="ident">byte</span>)),
         }
     }
 }
@@ -1436,13 +1436,13 @@
         <span class="comment">// are occupied by other types, and will be handled in other scenarios.</span>
         <span class="comment">// Hence we try other single byte prefix patterns here:</span>
         <span class="kw">let</span> <span class="ident">result</span> <span class="op">=</span> <span class="ident">create_object_from_buffer</span>(<span class="number">1</span>, <span class="kw-2">&amp;</span>[<span class="number">0x77</span>]);
-        <span class="macro">assert_eq!</span>(<span class="ident">result</span>, <span class="prelude-val">Err</span>(<span class="ident">ParseError::InvalidPrefix</span>(<span class="number">0x70</span>)));
+        <span class="macro">assert_eq!</span>(<span class="ident">result</span>, <span class="prelude-val">Err</span>(<span class="ident">ParseError::InvalidMarker</span>(<span class="number">0x70</span>)));
 
         <span class="kw">let</span> <span class="ident">result</span> <span class="op">=</span> <span class="ident">create_object_from_buffer</span>(<span class="number">1</span>, <span class="kw-2">&amp;</span>[<span class="number">0x84</span>]);
-        <span class="macro">assert_eq!</span>(<span class="ident">result</span>, <span class="prelude-val">Err</span>(<span class="ident">ParseError::InvalidPrefix</span>(<span class="number">0x80</span>)));
+        <span class="macro">assert_eq!</span>(<span class="ident">result</span>, <span class="prelude-val">Err</span>(<span class="ident">ParseError::InvalidMarker</span>(<span class="number">0x80</span>)));
 
         <span class="kw">let</span> <span class="ident">result</span> <span class="op">=</span> <span class="ident">create_object_from_buffer</span>(<span class="number">1</span>, <span class="kw-2">&amp;</span>[<span class="number">0xFF</span>]);
-        <span class="macro">assert_eq!</span>(<span class="ident">result</span>, <span class="prelude-val">Err</span>(<span class="ident">ParseError::InvalidPrefix</span>(<span class="number">0xF0</span>)));
+        <span class="macro">assert_eq!</span>(<span class="ident">result</span>, <span class="prelude-val">Err</span>(<span class="ident">ParseError::InvalidMarker</span>(<span class="number">0xF0</span>)));
     }
 
     <span class="comment">//</span>
